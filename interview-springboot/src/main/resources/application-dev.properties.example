@@ -1,0 +1,6 @@
+# 开发环境阿里云OSS配置示例
+# 开发者需要复制此文件为application-dev.properties并填入自己的配置
+aliyun.oss.endpoint=oss-cn-beijing.aliyuncs.com
+aliyun.oss.access-key-id=your_access_key_here
+aliyun.oss.secret-access-key=your_secret_key_here
+aliyun.oss.bucket-name=yisheng0 

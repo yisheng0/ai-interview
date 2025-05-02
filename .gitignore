@@ -1,0 +1,52 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# test 目录
+test/
+
+# interview-springboot 项目忽略
+interview-springboot/test
+interview-springboot/target/
+!interview-springboot/.mvn/wrapper/maven-wrapper.jar
+interview-springboot/.apt_generated
+interview-springboot/.classpath
+interview-springboot/.factorypath
+interview-springboot/.project
+interview-springboot/.settings
+interview-springboot/.springBeans
+interview-springboot/.sts4-cache
+interview-springboot/.idea/
+interview-springboot/*.iws
+interview-springboot/*.iml
+interview-springboot/*.ipr
+
+# 日志文件
+log/
+*.log
+
+# interview-next 项目忽略
+interview-next/node_modules/
+interview-next/.next/
+interview-next/.vercel/
+interview-next/out/
+interview-next/build/
+interview-next/.env*.local
+interview-next/npm-debug.log*
+interview-next/yarn-debug.log*
+interview-next/yarn-error.log*
+interview-next/.pnpm-debug.log*
+interview-next/前端_test
+
+# 其他常见文件忽略
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid* 

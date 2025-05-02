@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://mysql.sqlpub.com:3306/wensiquanyong
+    username: wensiquanyong
+    password: TDn8BXOje69intiG
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true #开启驼峰命名和下划线命名的自动转换
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+server:
+  port: 9090
+
+# JWT配置
+jwt:
+  secret: your_jwt_secret_key_here_please_change_in_production
+  expire: 604800 # 7天，单位秒
+
+llm:
+  dashscope:
+    apiKey: sk-500c01dfe3e046fb852dfebd2b5f9f25
+  

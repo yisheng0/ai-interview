@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Always respond in 中文
+1. 给每一个函数和变量添加符合文件标准的doc中文注释，对所有的关键逻辑添加单行或多行中文注释
+2. 确保遵循代码规范和设计模式，降低组件内部的耦合度。
