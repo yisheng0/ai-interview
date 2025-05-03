@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Navbar } from "@/components/navbar";
 import ThemeProvider from "./providers/ThemeProvider";
 import "./globals.css";
 
@@ -28,12 +27,10 @@ export default function RootLayout({
     <html lang="zh">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <ThemeProvider>
-          <>
-          <Navbar />
+          {/* <Navbar /> */}
           <main className="main-content">
             {children}
           </main>
-          </>
         </ThemeProvider>
       </body>
     </html>

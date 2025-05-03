@@ -11,7 +11,6 @@ interface RequestOptions {
   data?: any;
   headers?: Record<string, string>;
   isFormData?: boolean;
-  skipAuth?: boolean; // 是否跳过认证
 }
 
 /**
@@ -92,8 +91,7 @@ async function request<T>(
     method = 'GET', 
     data, 
     headers = {}, 
-    isFormData = false,
-    skipAuth = false
+    isFormData = false
   } = options;
   
   // 构建请求头
@@ -104,14 +102,6 @@ async function request<T>(
   // 非FormData请求添加Content-Type
   if (!isFormData) {
     requestHeaders['Content-Type'] = 'application/json';
-  }
-  
-  // 添加认证Token（除非明确跳过）
-  if (!skipAuth) {
-    const token = getToken();
-    if (token) {
-      requestHeaders['Authorization'] = `Bearer ${token}`;
-    }
   }
   
   // 构建请求选项
@@ -163,10 +153,16 @@ async function request<T>(
   }
 }
 
-// 添加默认请求拦截器 - 可以在此处添加全局请求头等
+// 添加默认请求拦截器 - 在此处统一处理认证Token
 addRequestInterceptor((url, options) => {
-  // 这里可以添加全局请求头或修改请求参数
-  return { url, options };
+  const headers = options.headers as HeadersInit;
+      const token = getToken();
+    if (token) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
+  
+  
+  return { url, options: { ...options, headers } };
 });
 
 // 添加默认响应拦截器 - 处理401未授权
@@ -177,8 +173,8 @@ addResponseInterceptor(async (response, responseData) => {
     useAuthStore.getState().clearAuth();
     
     // 重定向到登录页面
-    if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-      window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+    if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth')) {
+      window.location.href = '/auth?redirect=' + encodeURIComponent(window.location.pathname);
     }
   }
   
@@ -209,6 +205,18 @@ export function post<T>(endpoint: string, data?: any, urlParams?: any[], headers
 }
 
 /**
+ * HTTP PUT请求
+ * @param endpoint 端点名称
+ * @param data 请求数据
+ * @param urlParams URL参数
+ * @param headers 请求头
+ * @returns 服务器响应
+ */
+export function put<T>(endpoint: string, data?: any, urlParams?: any[], headers?: Record<string, string>): Promise<ServerResponse<T>> {
+  return request<T>(endpoint, { method: 'PUT', data, headers }, urlParams);
+}
+
+/**
  * HTTP DELETE请求
  * @param endpoint 端点名称
  * @param urlParams URL参数
@@ -219,35 +227,11 @@ export function del<T>(endpoint: string, urlParams?: any[], headers?: Record<str
   return request<T>(endpoint, { method: 'DELETE', headers }, urlParams);
 }
 
-/**
- * 不带认证的GET请求（用于登录等不需要token的请求）
- * @param endpoint 端点名称
- * @param urlParams URL参数
- * @param headers 请求头
- * @returns 服务器响应
- */
-export function publicGet<T>(endpoint: string, urlParams?: any[], headers?: Record<string, string>): Promise<ServerResponse<T>> {
-  return request<T>(endpoint, { method: 'GET', headers, skipAuth: true }, urlParams);
-}
-
-/**
- * 不带认证的POST请求（用于登录等不需要token的请求）
- * @param endpoint 端点名称
- * @param data 请求数据
- * @param urlParams URL参数
- * @param headers 请求头
- * @returns 服务器响应
- */
-export function publicPost<T>(endpoint: string, data?: any, urlParams?: any[], headers?: Record<string, string>): Promise<ServerResponse<T>> {
-  return request<T>(endpoint, { method: 'POST', data, headers, skipAuth: true }, urlParams);
-}
-
 export default {
   get,
   post,
+  put,
   del,
-  publicGet,
-  publicPost,
   addRequestInterceptor,
   addResponseInterceptor
 };

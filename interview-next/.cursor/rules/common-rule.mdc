@@ -8,4 +8,4 @@ Always respond in 中文
 2. 确保遵循代码规范和设计模式，降低组件内部的耦合度。
 3. 组件名称为小写，-连接。如： confirm-dialog.tsx
 4. 调试不要使用console.log，使用这个 import { clientLogger } from '@utils/logger';
-5. 样式优先使用material的useTheme中的
+5. 样式优先使用material的useTheme中的,注意代码样式要保持护肤的兼容
