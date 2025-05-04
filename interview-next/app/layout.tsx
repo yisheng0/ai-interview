@@ -1,21 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import ThemeProvider from "./providers/ThemeProvider";
 import "./globals.css";
+import "../utils/dayjs-config";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
-  title: "Next.js待办应用",
-  description: "一个简单的Next.js待办事项应用，具有日报功能",
+  title: "行向Next.js应用",
+  description: "行向Next.js面试辅助应用",
 };
 
 export default function RootLayout({
@@ -25,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className={inter.variable}>
         <ThemeProvider>
           {/* <Navbar /> */}
           <main className="main-content">

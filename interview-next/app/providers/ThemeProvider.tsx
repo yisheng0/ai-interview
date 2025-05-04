@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { useThemeStore } from '@/state/themeStore';
 import { useEffect } from 'react';
 import { getTheme } from '@/utils/theme';
+import DateTimeProvider from './DateTimeProvider';
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { themeMode } = useThemeStore();
@@ -24,7 +25,9 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
   return (
     <MuiThemeProvider theme={currentTheme}>
       <CssBaseline />
-      {children}
+      <DateTimeProvider>
+        {children}
+      </DateTimeProvider>
     </MuiThemeProvider>
   );
 } 

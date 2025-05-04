@@ -44,7 +44,7 @@ body {
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -61,8 +61,9 @@ a {
 }
 
 .main-content {
-  padding-top: 20px;
   min-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
 }
 
 @media (prefers-color-scheme: dark) {

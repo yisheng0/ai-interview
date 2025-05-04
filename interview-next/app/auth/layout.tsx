@@ -21,8 +21,8 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+    <>
+      {children}
+    </>
   );
 } 
