@@ -1,57 +1,89 @@
 'use client';
 
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import React from 'react';
 
 /**
- * 声波动画组件
- * 功能：
- * 1. 显示声波动效
- * 2. 支持动画开关控制
- * 3. 可自定义声波数量
- *
- * @param isAnimating 是否开始播放动画
- * @param length 组件长度（短竖线数量）
+ * 声波图标属性接口
  */
-export const WaveIcon = ({
-  isAnimating,
-  length = 8,
-}: {
+interface WaveIconProps {
+  /**
+   * 是否处于动画状态
+   */
   isAnimating: boolean;
-  length?: number;
-}) => {
+}
+
+/**
+ * 语音识别波形图标
+ */
+export const WaveIcon: React.FC<WaveIconProps> = ({ isAnimating }) => {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 0.5,
-        height: 20,
-      }}
-    >
-      {[...Array(length)].map((_, index) => (
+    <Box sx={{ display: 'flex', alignItems: 'flex-end', height: '16px', gap: '2px' }}>
+      {[1, 2, 3, 4].map((i) => (
         <Box
-          key={index}
+          key={i}
           sx={{
-            width: '0.15rem',
-            height: '1rem',
-            bgcolor: theme => theme.palette.secondary.main,
-            borderRadius: 4,
-            ...(isAnimating && {
-              animation: 'wave 1.5s ease-in-out infinite',
-              animationDelay: `${-(length * 0.2) + index * 0.2}s`,
-              '@keyframes wave': {
-                '0%, 100%': {
-                  transform: 'scaleY(0.2)',
-                },
-                '50%': {
-                  transform: 'scaleY(1)',
-                },
-              },
-            }),
+            width: '2px',
+            height: `${Math.max(4, Math.random() * 16)}px`,
+            backgroundColor: theme => theme.palette.primary.main,
+            borderRadius: '1px',
+            animation: isAnimating ? `wave-animation-${i} 1.2s infinite ease-in-out` : 'none',
+            '@keyframes wave-animation-1': {
+              '0%, 100%': { height: '6px' },
+              '50%': { height: '10px' },
+            },
+            '@keyframes wave-animation-2': {
+              '0%, 100%': { height: '8px' },
+              '50%': { height: '14px' },
+            },
+            '@keyframes wave-animation-3': {
+              '0%, 100%': { height: '10px' },
+              '50%': { height: '6px' },
+            },
+            '@keyframes wave-animation-4': {
+              '0%, 100%': { height: '4px' },
+              '50%': { height: '12px' },
+            },
           }}
         />
       ))}
     </Box>
   );
 };
+
+/**
+ * 语音识别指示器组件
+ */
+const VoiceRecognitionIndicator: React.FC = () => {
+  return (
+    <Box
+      sx={{
+        position: 'absolute',
+        top: '64px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '8px 16px',
+        borderRadius: '20px',
+        backgroundColor: theme => theme.palette.background.paper,
+        boxShadow: theme => theme.shadows[2],
+        zIndex: 10,
+      }}
+    >
+      <WaveIcon isAnimating={true} />
+      <Typography
+        variant="body2"
+        sx={{
+          ml: 1,
+          color: theme => theme.palette.primary.main,
+          fontWeight: 500,
+        }}
+      >
+        正在聆听...
+      </Typography>
+    </Box>
+  );
+};
+
+export default VoiceRecognitionIndicator;

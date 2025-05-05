@@ -82,6 +82,8 @@ export default function ChatHistoryCard({
             />
             <Box sx={{ width: '100%' }}>
               <Typography
+                variant="caption"
+                color="primary.light"
                 sx={{
                   fontSize: '20px',
                   lineHeight: 1.6,
@@ -156,6 +158,7 @@ export default function ChatHistoryCard({
                 WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
+                color: 'black',
               }}
             >
               {userQuestion}

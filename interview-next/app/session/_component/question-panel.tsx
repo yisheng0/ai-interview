@@ -7,26 +7,28 @@ import { WaveIcon } from './voice-recognition-indicator';
 /**
  * 问题面板组件属性
  */
-interface QuestionPanelProps {
+export interface QuestionPanelProps {
   // 面试问题文本
   question: string;
   // 占位文本，当没有问题时显示
   placeholder?: string;
   // 是否正在识别中
   isRecognizing?: boolean;
+  // 临时识别结果文本
+  interimText?: string;
 }
 
 /**
- * 问题面板组件
- *
  * 显示当前面试问题和语音识别状态
  */
 export default function QuestionPanel({
   question,
   placeholder = '面试官问题将被自动识别，并显示在此处',
   isRecognizing = true,
+  interimText = '',
 }: QuestionPanelProps) {
-  const hasQuestion = question && question.trim().length > 0;
+  // 判断是否有显示内容
+  const hasContent = question && question.trim().length > 0;
 
   return (
     <Box
@@ -95,10 +97,10 @@ export default function QuestionPanel({
           sx={{
             fontSize: '20px',
             lineHeight: 1.6,
-            color: theme => hasQuestion ? theme.palette.text.primary : theme.palette.text.disabled,
+            color: theme => hasContent ? theme.palette.text.primary : theme.palette.text.disabled,
           }}
         >
-          {hasQuestion ? question : placeholder}
+          {hasContent ? question : placeholder}
         </Typography>
       </Box>
     </Box>

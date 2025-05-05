@@ -77,11 +77,10 @@ export default function ConversationHistoryPanel({
       {/* 对话历史区域 */}
       <Box sx={{ width: '100%' }}>
         {/* 示例对话卡片 */}
-        <ChatHistoryCard
+        {/* <ChatHistoryCard
           userQuestion="请你先做个自我介绍吧请你先做个自我介绍吧请你先做个自我介绍吧请你先做个自我介绍吧"
-          aiResponse="面试官您好，我的名字叫金云伟。我来自北京京都及当道面试官您好，我的名字叫金云伟。我来自北京京都及当道。
-                      面试官您好，我的名字叫金云伟。我来自北京京都及当道面试官您好，我的名字叫金云伟。我来自北京京都及当道。"
-        />
+          aiResponse="面试官您好，我的名字叫XXX。"
+        /> */}
       </Box>
     </Box>
   );
