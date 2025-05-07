@@ -7,6 +7,7 @@ import resumeSvg from '@/public/svg/interview-agenda-resume.svg';
 import Image from 'next/image';
 import { InterviewStatus, type Interview } from '@/state/interview-store';
 import { useModalStore } from '@/state/dialog-store';
+import { useRouter } from 'next/navigation';
 
 /**
  * 简历信息卡片组件
@@ -16,12 +17,13 @@ import { useModalStore } from '@/state/dialog-store';
  * @returns {JSX.Element} 简历信息卡片组件
  */
 export default function ResumeInfo() {
+  const router = useRouter();
   // 从全局状态获取对话框控制方法
   const { openInterviewAgendaDetailDialog } = useModalStore();
 
   // 处理点击编辑简历按钮
   const handleEditResume = () => {
-    console.log('编辑简历');
+    router.push('/resume');
   };
 
   /**
@@ -53,7 +55,7 @@ export default function ResumeInfo() {
         }
       ]
     };
-    
+
     // 打开预填充的面试对话框
     openInterviewAgendaDetailDialog(quickInterviewData);
   };
@@ -75,9 +77,15 @@ export default function ResumeInfo() {
       <Stack direction="row" alignItems="center" spacing={2}>
         <Image src={resumeSvg} alt="简历" width={64} height={60} />
         <Stack>
-          <Typography variant="h6" fontWeight="medium">
-            我的简历
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h6" fontWeight="medium">
+              我的简历
+            </Typography>
+            <Typography variant="body2" color="primary" fontWeight="bold" onClick={handleEditResume}>
+              编辑
+            </Typography>
+          </Box>
+
           <Typography variant="body2" color="text.secondary">
             AI将结合你的简历作答，
             <Typography component="span" variant="body2" color="primary" fontWeight="bold">
