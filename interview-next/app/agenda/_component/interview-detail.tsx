@@ -393,7 +393,8 @@ export default function InterviewDetail() {
       </Box>
 
       {/* 底部操作按钮 */}
-      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, gap: 2, display: 'flex'}}>
+        <Button>回顾</Button>
         <Button
           variant="contained"
           color="primary"

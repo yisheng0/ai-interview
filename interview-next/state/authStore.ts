@@ -11,8 +11,30 @@ interface AuthActions {
   clearAuth: () => void;
 }
 
+/**
+ * 从cookie中获取token
+ * @returns token字符串或null
+ */
+function getTokenFromCookie(): string | null {
+  // 只在客户端环境执行
+  if (typeof document === 'undefined') return null;
+  
+  // 从cookie中获取auth-token
+  const cookies = document.cookie.split(';');
+  for (let i = 0; i < cookies.length; i++) {
+    const cookie = cookies[i].trim();
+    if (cookie.startsWith('auth-token=')) {
+      return cookie.substring('auth-token='.length);
+    }
+  }
+  return null;
+}
+
+// 从cookie中读取token初始化状态
+const cookieToken = getTokenFromCookie();
+
 const initialState: AuthState = {
-  token: null,
+  token: cookieToken,
   userId: null,
   username: null,
 };

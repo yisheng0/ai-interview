@@ -65,13 +65,24 @@ const getToken = (): string | null => {
  * @returns 完整URL
  */
 function getEndpointUrl(endpoint: string, params?: any[]): string {
-  const url = API_ENDPOINTS[endpoint as keyof typeof API_ENDPOINTS];
+  // 获取API端点定义
+  const urlEndpoint = API_ENDPOINTS[endpoint as keyof typeof API_ENDPOINTS];
   
-  if (!url) {
+  if (!urlEndpoint) {
     throw new Error(`未找到API端点: ${endpoint}`);
   }
   
-  return url;
+  // 处理函数式API端点（如AI_STREAM_MESSAGE）
+  if (typeof urlEndpoint === 'function' && params) {
+    // 假设函数的第一个参数是会话ID
+    if (params.length > 0) {
+      return urlEndpoint(params[0]);
+    }
+    throw new Error(`函数式API端点 ${endpoint} 需要参数`);
+  }
+  
+  // 处理字符串端点
+  return urlEndpoint as string;
 }
 
 /**
@@ -132,18 +143,48 @@ async function request<T>(
     // 发送请求
     const response = await fetch(finalUrl, requestOptions);
     
-    // 解析响应
-    const responseData = await response.json();
+    // 检查响应状态
+    if (!response.ok) {
+      let errorMessage;
+      
+      try {
+        // 尝试解析为JSON
+        const errorData = await response.json();
+        errorMessage = errorData.message || `服务器响应错误: ${response.status}`;
+      } catch (jsonError) {
+        // 非JSON响应，获取文本或状态
+        try {
+          const textError = await response.text();
+          errorMessage = textError || `服务器响应错误: ${response.status} ${response.statusText}`;
+        } catch (textError) {
+          errorMessage = `服务器响应错误: ${response.status} ${response.statusText}`;
+        }
+      }
+      
+      throw new Error(errorMessage);
+    }
+    
+    // 尝试解析响应
+    let responseData;
+    
+    try {
+      // 尝试获取JSON
+      responseData = await response.json();
+    } catch (jsonError) {
+      clientLogger.error(`解析JSON响应失败:`, jsonError);
+      
+      // 创建一个基本的成功响应
+      responseData = {
+        code: response.status,
+        data: null,
+        message: '服务器返回非JSON响应'
+      };
+    }
     
     // 应用响应拦截器
     let finalResponseData = responseData;
     for (const interceptor of responseInterceptors) {
       finalResponseData = await interceptor(response, finalResponseData);
-    }
-    
-    // 请求成功但业务逻辑可能有错误
-    if (!response.ok) {
-      throw new Error(finalResponseData.message || '请求失败');
     }
     
     return finalResponseData as ServerResponse<T>;
@@ -157,6 +198,7 @@ async function request<T>(
 addRequestInterceptor((url, options) => {
   const headers = options.headers as HeadersInit;
       const token = getToken();
+      console.log('token', token);
     if (token) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }

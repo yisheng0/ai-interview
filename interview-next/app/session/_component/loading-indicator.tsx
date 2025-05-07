@@ -1,41 +1,65 @@
 'use client';
 
-import { Box, CircularProgress, Typography } from '@mui/material';
-import React from 'react';
+import { Box } from '@mui/material';
+import { keyframes } from '@mui/system';
+
+/**
+ * 点动画关键帧
+ */
+const dotAnimation = keyframes`
+  0% { transform: scale(0.5); opacity: 0.3; }
+  50% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.5); opacity: 0.3; }
+`;
+
+/**
+ * 加载指示器组件属性
+ */
+interface LoadingIndicatorProps {
+  /**
+   * 点的数量
+   */
+  dotsCount?: number;
+  /**
+   * 指示器颜色
+   */
+  color?: string;
+}
 
 /**
  * 加载指示器组件
+ *
+ * 显示加载状态的动画指示器，由多个点组成
+ * 设计稿中三个小点加一个大点的加载指示器
  */
-const LoadingIndicator: React.FC = () => {
+export default function LoadingIndicator({
+  dotsCount = 4,
+  color = '#2196F3',
+}: LoadingIndicatorProps) {
+  // 创建点的数组
+  const dots = Array.from({ length: dotsCount }, (_, i) => i);
+
   return (
     <Box
       sx={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        borderRadius: '8px',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        zIndex: 1000,
+        gap: '4px',
       }}
     >
-      <CircularProgress size={40} sx={{ color: 'white' }} />
-      <Typography
-        variant="body1"
-        sx={{
-          color: 'white',
-          mt: 2,
-        }}
-      >
-        正在分析问题并生成回答...
-      </Typography>
+      {dots.map(i => (
+        <Box
+          key={i}
+          sx={{
+            width: i === dots.length - 1 ? '6px' : '4px',
+            height: i === dots.length - 1 ? '6px' : '4px',
+            borderRadius: '50%',
+            backgroundColor: color,
+            animation: `${dotAnimation} 1.2s infinite ease-in-out`,
+            animationDelay: `${i * 0.2}s`,
+          }}
+        />
+      ))}
     </Box>
   );
-};
-
-export default LoadingIndicator;
+}

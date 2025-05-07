@@ -11,6 +11,10 @@ import SessionHeader from './_component/session-header';
 import SessionLayout from './_component/session-layout';
 import { useXfyunSpeech, RecognitionStatus } from '@/utils/xfyun-speech';
 import { clientLogger } from '@/utils/logger';
+import { useChatStore } from '@/state';
+import { createSession, sendMessage, saveConversation, createStreamingConnection } from '@/api/services/aiService';
+import { Typography } from '@mui/material';
+import AgentBubble from './_component/agent-bubble';
 
 /**
  * 会话模块属性接口
@@ -103,6 +107,18 @@ export default function InterviewSessionClientModule({
   sessionBillingUuid,
 }: InterviewSessionClientModuleProps) {
   const router = useRouter();
+  
+  // 使用聊天状态
+  const { 
+    setSessionId, 
+    sessionId,
+    hasActiveSession,
+    messages, 
+    addUserMessage, 
+    addAssistantMessage,
+    getAllMessages,
+    clearMessages
+  } = useChatStore();
 
   // ==================== 状态管理 ====================
   
@@ -121,8 +137,9 @@ export default function InterviewSessionClientModule({
   const [aiResponse, setAiResponse] = useState('');            // AI回复内容
   const [analysisResponse, setAnalysisResponse] = useState(''); // 分析回复内容
   
-  // 对话历史
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  // 会话创建状态
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   
   // ==================== Refs ====================
   
@@ -135,6 +152,9 @@ export default function InterviewSessionClientModule({
   const isProcessingRef = useRef<boolean>(false);
   const recognizedTextRef = useRef<string>('');
   const processingQuestionRef = useRef<string>('');
+  
+  // 流式响应取消函数
+  const streamCancelRef = useRef<(() => void) | null>(null);
   
   // 使用讯飞语音识别Hook
   const { 
@@ -151,11 +171,44 @@ export default function InterviewSessionClientModule({
     lang: 'cn'
   });
   
+  // 新增的isAiStreaming状态
+  const [isAiStreaming, setIsAiStreaming] = useState<boolean>(false);
+  
   /**
    * 检测操作系统类型
    */
   const detectOS = () => {
     return navigator.userAgent.indexOf('Mac') !== -1;
+  };
+  
+  /**
+   * 创建面试会话
+   * 当没有传入会话ID时，创建新的会话
+   */
+  const createInterviewSession = async (interviewId: string = '7', roundId: string = '4') => {
+    try {
+      setIsCreatingSession(true);
+      setSessionError(null);
+      
+      // 调用创建会话API
+      const response = await createSession(interviewId, roundId);
+      
+      if (response.code === 200 && response.data) {
+        // 保存会话ID到全局状态
+        setSessionId(response.data.sessionId);
+        clientLogger.info('创建会话成功，ID:', response.data.sessionId);
+        return response.data.sessionId;
+      } else {
+        throw new Error(response.message || '创建会话失败');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '创建会话失败，请重试';
+      clientLogger.error('创建会话错误:', error);
+      setSessionError(errorMessage);
+      return null;
+    } finally {
+      setIsCreatingSession(false);
+    }
   };
   
   /**
@@ -249,7 +302,7 @@ export default function InterviewSessionClientModule({
   
   /**
    * 设置页面为处理状态
-   * @param question 问题文本
+   * @param question 识别到的问题
    */
   const setProcessingState = (question: string) => {
     // 确保问题有内容
@@ -298,7 +351,7 @@ export default function InterviewSessionClientModule({
   };
   
   /**
-   * 获取AI回复（模拟）
+   * 获取AI回复
    * @param userInput 用户输入的问题
    */
   const fetchAIResponse = async (userInput: string) => {
@@ -309,41 +362,126 @@ export default function InterviewSessionClientModule({
       return;
     }
     
+    // 确保有会话ID
+    if (!sessionId) {
+      clientLogger.error('获取AI回复失败: 没有有效的会话ID');
+      setAnalysisResponse('连接错误，请重新进入面试');
+      setAiResponse('连接错误，请重新进入面试');
+      isProcessingRef.current = false;
+      return;
+    }
+    
     try {
       clientLogger.info('请求AI回复，问题：', userInput);
       
-      // 获取AI回复（模拟）
-      const { response, analysis } = await mockAIResponse(userInput);
+      // 添加用户消息到聊天历史
+      addUserMessage(userInput);
       
-      // 更新状态
-      setAnalysisResponse(analysis);
-      setAiResponse(response);
+      // 取消之前的流式连接
+      if (streamCancelRef.current) {
+        streamCancelRef.current();
+        streamCancelRef.current = null;
+      }
       
-      // 更新对话历史
-      setChatHistory(prev => [
-        ...prev,
-        { role: 'user', content: userInput, timestamp: Date.now() },
-        { role: 'assistant', content: response, timestamp: Date.now() }
-      ]);
+      // 明确设置为处理中状态
+      setUIState(UIState.PROCESSING);
       
+      // 预设初始状态
+      setAiResponse('');
+      setAnalysisResponse('');
+      
+      // 启用流式响应状态
+      setIsAiStreaming(true);
+      
+      // 同时发起两个请求（并发处理）
+      let fullResponse = '';
+      
+      // 问题分析请求（非流式）
+      const analysisPromise = sendMessage(sessionId, userInput)
+        .then(response => {
+          if (response.code === 200 && response.data) {
+            // 更新分析回复
+            const analysisText = response.data.reply.substring(0, 50); // 限制分析长度在50字以内
+            setAnalysisResponse(analysisText);
+          } else {
+            // 请求成功但业务错误
+            clientLogger.warn('分析请求返回非成功状态:', response);
+            setAnalysisResponse('分析生成中...');
+          }
+        })
+        .catch(analysisError => {
+          // 分析请求失败记录错误
+          clientLogger.error('获取分析失败:', analysisError);
+          setAnalysisResponse('分析生成中...');
+        });
+      
+      // AI回答请求（流式）
+      const streamingPromise = new Promise<void>((resolve, reject) => {
+        // 创建新的流式连接
+        streamCancelRef.current = createStreamingConnection(
+          sessionId,
+          userInput,
+          // 处理数据块
+          (chunk) => {
+            // 确保组件仍然在流式状态
+            setIsAiStreaming(true);
+            
+            // 更新完整响应
+            fullResponse += chunk;
+            
+            // 更新UI显示
+            setAiResponse(prev => {
+              // 使用函数式更新确保获取最新状态
+              return prev + chunk;
+            });
+          },
+          // 完成回调
+          () => {
+            clientLogger.info('流式响应完成');
+            // 添加AI回复到聊天历史
+            addAssistantMessage(fullResponse);
+            // 禁用流式响应状态
+            setIsAiStreaming(false);
+            streamCancelRef.current = null;
+            resolve();
+          },
+          // 错误回调
+          (error) => {
+            clientLogger.error('流式请求错误:', error);
+            setAiResponse(fullResponse || '回答生成出错，请重试');
+            // 禁用流式响应状态
+            setIsAiStreaming(false);
+            
+            // 如果有部分回复，也添加到历史
+            if (fullResponse) {
+              addAssistantMessage(fullResponse);
+            }
+            
+            streamCancelRef.current = null;
+            reject(error);
+          }
+        );
+      });
+      
+      // 并发执行两个请求，但不阻塞等待完成
+      Promise.all([analysisPromise, streamingPromise])
+        .catch(error => {
+          clientLogger.error('并发请求出错:', error);
+        });
+        
     } catch (error) {
       clientLogger.error('获取AI回复失败:', error);
       // 显示错误信息
       setAnalysisResponse('获取分析失败，请重试');
       setAiResponse('回答生成失败，请重试');
+      // 禁用流式响应状态
+      setIsAiStreaming(false);
     } finally {
       // 处理完成后重置状态
       isProcessingRef.current = false;
       
       // 清空识别的文本，准备接收新问题
       recognizedTextRef.current = '';
-      
-      // 不再自动切换回识别状态，等待下次语音活动触发时才切换
-      // setTimeout(() => {
-      //   if (!isProcessingRef.current) {
-      //     setRecognizingState();
-      //   }
-      // }, 500);
       
       // 启动静音检测，等待下次语音活动
       startSilenceDetection();
@@ -392,21 +530,68 @@ export default function InterviewSessionClientModule({
   /**
    * 处理退出面试
    */
-  const handleExitInterview = () => {
-    // 停止录音和识别
-    clientLogger.info('停止语音识别');
-    stopRecognition();
-    
-    // 清除定时器
-    if (silenceTimerRef.current) {
-      clearInterval(silenceTimerRef.current);
+  const handleExitInterview = async () => {
+    try {
+      // 停止录音和识别
+      clientLogger.info('停止语音识别');
+      stopRecognition();
+      
+      // 清除定时器
+      if (silenceTimerRef.current) {
+        clearInterval(silenceTimerRef.current);
+      }
+      
+      // 取消流式连接
+      if (streamCancelRef.current) {
+        streamCancelRef.current();
+      }
+      
+      // 保存对话历史
+      if (sessionId && messages.length > 0) {
+        clientLogger.info('保存对话历史');
+        await saveConversation(sessionId, messages);
+      }
+      
+      // 清空会话状态
+      clearMessages();
+    } catch (error) {
+      clientLogger.error('退出面试时出错:', error);
+    } finally {
+      // 返回主页面
+      router.push('/agenda');
     }
-    
-    // 返回主页面
-    router.push('/');
   };
   
   // ==================== 效果钩子 ====================
+  
+  // 会话初始化 - 在组件挂载时执行
+  useEffect(() => {
+    const initSession = async () => {
+      // 如果已经有活跃会话，不需要创建
+      if (hasActiveSession) {
+        clientLogger.info('已有活跃会话，无需创建');
+        return;
+      }
+      
+      // 传入的sessionUuid优先使用
+      if (sessionUuid) {
+        clientLogger.info('使用传入的会话ID:', sessionUuid);
+        setSessionId(sessionUuid);
+      } else {
+        // 无会话ID，需要创建新会话
+        clientLogger.info('没有会话ID，创建新会话');
+        const newSessionId = await createInterviewSession();
+        
+        // 如果创建失败，提示错误
+        if (!newSessionId) {
+          clientLogger.error('创建会话失败');
+          // 这里可以显示错误提示或者重定向
+        }
+      }
+    };
+    
+    initSession();
+  }, [sessionUuid, hasActiveSession, setSessionId]);
   
   // 监听语音识别状态变化
   useEffect(() => {
@@ -498,6 +683,11 @@ export default function InterviewSessionClientModule({
       if (silenceTimerRef.current) {
         clearInterval(silenceTimerRef.current);
       }
+      
+      // 取消流式连接
+      if (streamCancelRef.current) {
+        streamCancelRef.current();
+      }
     };
   }, []);
   
@@ -522,15 +712,23 @@ export default function InterviewSessionClientModule({
   };
   
   /**
-   * 获取回答面板内容
+   * 获取AI回复内容
    */
   const getResponseContent = () => {
+    // 根据不同状态返回不同内容
     if (uiState === UIState.INITIAL && !aiResponse) {
-      return '此处将显示AI的实时回答';
+      // 初始状态且没有AI回复
+      return <Typography variant="body1">AI将在这里提供答案提示</Typography>;
     } else if (uiState === UIState.PROCESSING && !aiResponse) {
-      return '正在生成中，请稍后...';
+      // 处理中且没有AI回复 - 显示加载状态
+      return <Typography variant="body1">AI正在思考中...</Typography>;
+    } else if (aiResponse) {
+      // 有AI回复，使用AgentBubble显示并传递流式状态
+      return <AgentBubble text={aiResponse} isStreaming={isAiStreaming} />;
+    } else {
+      // 其他情况
+      return <Typography variant="body1">AI将在这里提供答案提示</Typography>;
     }
-    return aiResponse || '此处将显示AI的实时回答';
   };
   
   /**
@@ -542,6 +740,42 @@ export default function InterviewSessionClientModule({
     }
     return '';
   };
+
+  // 如果会话创建出错，显示错误提示
+  if (sessionError) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          width: '100%',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: '#f1fafe',
+        }}
+      >
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {sessionError}
+        </Alert>
+        <Box sx={{ mt: 2 }}>
+          <button
+            onClick={() => router.push('/agenda')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '4px',
+              backgroundColor: '#1976d2',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            返回日程页
+          </button>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -592,24 +826,22 @@ export default function InterviewSessionClientModule({
         {/* 左侧面试问题区域 */}
         <QuestionPanel
           question={displayQuestion}
-          placeholder={getQuestionPlaceholder()}
           isRecognizing={uiState === UIState.RECOGNIZING}
-          interimText=""
+          placeholder={getQuestionPlaceholder()}
         />
 
-        {/* 中间分析和AI回答区域 */}
+        {/* 中间分析回答区域 */}
         <AnalysisResponsePanel
           analysisContent={getAnalysisContent()}
           responseContent={getResponseContent()}
           isLoading={uiState === UIState.PROCESSING && !aiResponse}
-          analysisPlaceholder="此处将显示面试问题的回答思路供参考"
-          responsePlaceholder="此处将显示AI的实时回答"
+          isStreaming={isAiStreaming}
         />
 
         {/* 右侧对话历史区域 */}
-        <ConversationHistoryPanel 
-          history={chatHistory} 
-          placeholder="此处将显示对话记录"
+        <ConversationHistoryPanel
+          // 使用全局状态中的消息历史
+          history={messages}
         />
       </SessionLayout>
     </Box>

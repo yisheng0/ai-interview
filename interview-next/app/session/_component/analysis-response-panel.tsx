@@ -10,11 +10,13 @@ import LoadingIndicator from './loading-indicator';
  */
 interface AnalysisResponsePanelProps {
   // 问题分析内容
-  analysisContent: string;
+  analysisContent: string | React.ReactNode;
   // AI回答内容
-  responseContent: string;
+  responseContent: string | React.ReactNode;
   // 是否正在加载
   isLoading?: boolean;
+  // 是否正在流式显示
+  isStreaming?: boolean;
   // 分析区域占位文本
   analysisPlaceholder?: string;
   // 回答区域占位文本
@@ -30,6 +32,7 @@ export default function AnalysisResponsePanel({
   analysisContent,
   responseContent,
   isLoading = false,
+  isStreaming = false,
   analysisPlaceholder = '此处将显示面试问题的回答思路供参考',
   responsePlaceholder = '此处将显示AI的实时回答',
 }: AnalysisResponsePanelProps) {
@@ -97,19 +100,23 @@ export default function AnalysisResponsePanel({
                   color: theme => theme.palette.text.secondary,
                 }}
               >
-                {analysisContent}
+                正在生成中，请稍候...
               </Typography>
             </Box>
           ) : analysisContent ? (
-            <Typography
-              sx={{
-                fontSize: '20px',
-                lineHeight: 1.6,
-                color: theme => theme.palette.text.primary,
-              }}
-            >
-              {analysisContent}
-            </Typography>
+            typeof analysisContent === 'string' ? (
+              <Typography
+                sx={{
+                  fontSize: '20px',
+                  lineHeight: 1.6,
+                  color: theme => theme.palette.text.primary,
+                }}
+              >
+                {analysisContent}
+              </Typography>
+            ) : (
+              analysisContent
+            )
           ) : (
             <Typography
               sx={{
@@ -176,11 +183,15 @@ export default function AnalysisResponsePanel({
                   color: theme => theme.palette.text.secondary,
                 }}
               >
-                {responseContent}
+                正在生成中，请稍候...
               </Typography>
             </Box>
           ) : responseContent ? (
-            <AgentBubble text={responseContent} />
+            typeof responseContent === 'string' ? (
+              <AgentBubble text={responseContent} isStreaming={isStreaming} />
+            ) : (
+              responseContent
+            )
           ) : (
             <Typography
               sx={{

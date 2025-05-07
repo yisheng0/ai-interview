@@ -19,5 +19,5 @@ jwt:
 
 llm:
   dashscope:
-    apiKey: sk-500c01dfe3e046fb852dfebd2b5f9f25
+    apiKey: sk-fed57a50b6f8486eb102b6c053b0a79a
   

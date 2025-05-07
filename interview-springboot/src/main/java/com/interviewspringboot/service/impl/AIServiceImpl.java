@@ -33,6 +33,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import com.alibaba.dashscope.aigc.generation.GenerationParam;
+import io.reactivex.Flowable;
 
 /**
  * AI服务实现类
@@ -245,62 +247,77 @@ public class AIServiceImpl implements AIService {
                     .build();
             messageManager.add(userMsg);
             
-            // 注意：不再更新数据库中的对话记录
-            // 对话记录将只在saveConversation方法中更新
-            
             // 使用CompletableFuture异步处理
             CompletableFuture.runAsync(() -> {
+                StringBuilder fullResponse = new StringBuilder(); // 用于收集完整响应以供后续存储
                 try {
-                    StringBuilder fullResponse = new StringBuilder();
-                    
-                    // 调用通义千问API
-                    Generation generation = new Generation();
-                    QwenParam param = QwenParam.builder()
-                            .model(Generation.Models.QWEN_TURBO)
-                            .messages(messageManager.get())
-                            .apiKey(apiKey)
-                            .resultFormat(QwenParam.ResultFormat.MESSAGE)
+                    Generation generation = new Generation(); // 可以考虑是否在类级别注入或复用
+
+                    // 构建流式调用参数，参考官方文档
+                    GenerationParam param = GenerationParam.builder()
+                            .apiKey(apiKey) // 使用您配置的apiKey
+                            .model(Generation.Models.QWEN_TURBO) // 您当前使用的模型，或按需更改，如 "qwen-plus"
+                            .messages(messageManager.get()) // 获取当前对话历史
+                            .resultFormat(GenerationParam.ResultFormat.MESSAGE) // 按消息格式返回
+                            .incrementalOutput(true) // 启用增量输出
                             .build();
                     
-                    GenerationResult result = generation.call(param);
-                    String response = result.getOutput().getChoices().get(0).getMessage().getContent();
+                    log.info("用户 {} 请求流式对话 (真流式): sessionId={}, message={}", userId, sessionId, message);
+                    Flowable<GenerationResult> resultFlowable = generation.streamCall(param);
                     
-                    // 将响应分成小块发送
-                    int chunkSize = 5;
-                    for (int i = 0; i < response.length(); i += chunkSize) {
-                        String chunk = response.substring(i, Math.min(i + chunkSize, response.length()));
-                        fullResponse.append(chunk);
-                        
-                        StreamResponse streamResponse = new StreamResponse("message", chunk, i + chunkSize >= response.length());
-                        emitter.send(objectMapper.writeValueAsString(streamResponse));
-                        
-                        Thread.sleep(50); // 添加延迟模拟流式效果
-                    }
+                    // 使用 RxJava Flowable 的 blockingForEach 来处理每个流式返回的结果
+                    // 这会在当前 CompletableFuture 的线程中阻塞执行，直到流结束
+                    resultFlowable.blockingForEach(generationResult -> {
+                        if (generationResult.getOutput() != null && 
+                            generationResult.getOutput().getChoices() != null && 
+                            !generationResult.getOutput().getChoices().isEmpty()) {
+                            
+                            String contentChunk = generationResult.getOutput().getChoices().get(0).getMessage().getContent();
+                            String finishReason = generationResult.getOutput().getChoices().get(0).getFinishReason();
+                            boolean isLastChunk = "stop".equalsIgnoreCase(finishReason);
+
+                            if (contentChunk != null) {
+                                fullResponse.append(contentChunk);
+                                StreamResponse streamResponse = new StreamResponse("message", contentChunk, isLastChunk);
+                                try {
+                                    emitter.send(objectMapper.writeValueAsString(streamResponse));
+                                } catch (IOException e) {
+                                    log.error("SSE发送错误 during stream for session {}: {}", sessionId, e.getMessage());
+                                    // 如果发送失败，需要中断Flowable的进一步处理
+                                    // 通过抛出RuntimeException，会被外层的catch捕获
+                                    throw new RuntimeException("SSE send error", e); 
+                                }
+                            }
+                            if (isLastChunk) {
+                                log.info("流式对话结束 (finishReason=stop): sessionId={}", sessionId);
+                            }
+                        }
+                    });
                     
-                    // 添加助手响应到消息历史（仅内存中）
+                    // 流处理完毕后（成功或因错误中断后），添加助手完整响应到内存中的消息历史
                     Message assistantMsg = Message.builder()
                             .role(Role.ASSISTANT.getValue())
                             .content(fullResponse.toString())
                             .build();
                     messageManager.add(assistantMsg);
                     
-                    // 注意：不再更新数据库中的对话记录
-                    // 对话记录将只在saveConversation方法中更新
+                    // 注意：数据库中的对话记录仍然只在saveConversation方法中更新
                     
-                    emitter.complete();
+                    emitter.complete(); // 正常完成SSE流
+                    log.info("流式对话正常完成: sessionId={}", sessionId);
                     
-                } catch (Exception e) {
-                    log.error("流式对话失败", e);
+                } catch (Exception e) { //捕获 streamCall 或 blockingForEach 或 emitter.send 抛出的异常
+                    log.error("流式对话处理失败: sessionId={}, error={}", sessionId, e.getMessage(), e);
                     try {
                         emitter.completeWithError(e);
                     } catch (Exception ex) {
-                        log.error("完成emitter出错", ex);
+                        log.error("完成emitter出错 (after stream error): sessionId={}, error={}", sessionId, ex.getMessage());
                     }
                 }
             });
             
-        } catch (Exception e) {
-            log.error("初始化流式对话失败", e);
+        } catch (Exception e) { // 捕获 streamChat 方法初始化阶段的错误
+            log.error("初始化流式对话失败: sessionId={}, error={}", sessionId, e.getMessage(), e);
             completeWithError(emitter, "初始化流式对话失败: " + e.getMessage());
         }
         
@@ -470,11 +487,9 @@ public class AIServiceImpl implements AIService {
      */
     private void completeWithError(SseEmitter emitter, String errorMessage) {
         try {
-            StreamResponse errorResponse = new StreamResponse("error", errorMessage, true);
-            emitter.send(objectMapper.writeValueAsString(errorResponse));
-            emitter.complete();
-        } catch (IOException e) {
-            emitter.completeWithError(e);
+            emitter.completeWithError(new RuntimeException(errorMessage));
+        } catch (Exception e) {
+            log.error("Error completing emitter with error: {}", e.getMessage());
         }
     }
 
