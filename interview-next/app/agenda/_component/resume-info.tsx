@@ -81,7 +81,7 @@ export default function ResumeInfo() {
             <Typography variant="h6" fontWeight="medium">
               我的简历
             </Typography>
-            <Typography variant="body2" color="primary" fontWeight="bold" onClick={handleEditResume}>
+            <Typography variant="body2" color="primary" fontWeight="bold" onClick={handleEditResume} sx={{ cursor: 'pointer' }}>
               编辑
             </Typography>
           </Box>

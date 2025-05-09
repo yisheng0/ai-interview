@@ -37,7 +37,10 @@ interface ExperienceSectionProps {
  * 工作经验组件
  * 支持添加、编辑和删除多条工作经验
  */
-export default function ExperienceSection({ experience, onChange }: ExperienceSectionProps) {
+export default function ExperienceSection({ experience = [], onChange }: ExperienceSectionProps) {
+  // 确保experience是数组
+  const experienceList = Array.isArray(experience) ? experience : [];
+  
   // 初始化一个空的工作经验对象
   const emptyExperience: Experience = {
     id: Date.now().toString(),
@@ -74,12 +77,12 @@ export default function ExperienceSection({ experience, onChange }: ExperienceSe
     let updatedExperience;
     if (isEditing) {
       // 更新已有记录
-      updatedExperience = experience.map(item => 
+      updatedExperience = experienceList.map(item => 
         item.id === currentExperience.id ? currentExperience : item
       );
     } else {
       // 添加新记录
-      updatedExperience = [...experience, { ...currentExperience, id: Date.now().toString() }];
+      updatedExperience = [...experienceList, { ...currentExperience, id: Date.now().toString() }];
     }
     
     onChange(updatedExperience);
@@ -96,7 +99,7 @@ export default function ExperienceSection({ experience, onChange }: ExperienceSe
   // 删除工作经验
   const handleDelete = (id: string | undefined) => {
     if (!id) return;
-    const updatedExperience = experience.filter(item => item.id !== id);
+    const updatedExperience = experienceList.filter(item => item.id !== id);
     onChange(updatedExperience);
   };
   
@@ -204,15 +207,15 @@ export default function ExperienceSection({ experience, onChange }: ExperienceSe
       
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
-          已添加工作经验({experience.length})
+          已添加工作经验({experienceList.length})
         </Typography>
         
-        {experience.length === 0 ? (
+        {experienceList.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             尚未添加任何工作经验
           </Typography>
         ) : (
-          experience.map((exp, index) => (
+          experienceList.map((exp, index) => (
             <Card key={exp.id || index} sx={{ mb: 2 }}>
               <CardContent>
                 <Grid container>

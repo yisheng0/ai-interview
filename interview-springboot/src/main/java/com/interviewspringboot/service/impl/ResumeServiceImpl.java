@@ -76,8 +76,19 @@ public class ResumeServiceImpl implements ResumeService {
                 // 执行更新
                 resumeMapper.update(resume);
             } else {
-                // 新增操作
-                resumeMapper.insert(resume);
+                // 检查用户是否已有简历，符合"一个用户一份简历"的设计
+                List<Resume> existingResumes = resumeMapper.selectByUserId(userId);
+                if (!existingResumes.isEmpty()) {
+                    // 用户已有简历，执行更新操作
+                    Resume existingResume = existingResumes.get(0);
+                    resume.setId(existingResume.getId());
+                    resumeMapper.update(resume);
+                    log.info("用户 {} 已有简历，执行更新操作，简历ID: {}", userId, existingResume.getId());
+                } else {
+                    // 用户没有简历，执行新增操作
+                    resumeMapper.insert(resume);
+                    log.info("用户 {} 没有简历，执行新增操作", userId);
+                }
             }
             
             // 查询最新数据

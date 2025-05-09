@@ -14,7 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.multipart.MultipartFile;
+import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +35,11 @@ public class AIController {
 
     @Autowired
     private AIService aiService;
+    
+    /**
+     * Tika实例，用于文件内容分析
+     */
+    private final Tika tika = new Tika();
     
     /**
      * 创建AI会话
@@ -46,18 +58,75 @@ public class AIController {
     }
     
     /**
-     * 发送消息并获取回复
+     * 发送消息并获取回复，支持可选的文件上传
      * 
-     * @param request 发送消息请求
+     * @param message 消息内容
+     * @param file 可选的上传文件
      * @return 消息响应
      */
     @PostMapping("/message/send")
-    public Result<MessageResponse> sendMessage(@RequestBody SendMessageRequest request) {
+    public Result<MessageResponse> sendMessage(
+            @RequestParam("message") String message,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
         // 从ThreadLocal中获取用户信息
         Map<String, Object> userMap = ThreadLocalUtil.get();
         Long userId = Long.valueOf(userMap.get("userId").toString());
         
-        log.info("用户 {} 发送消息: sessionId={}, message={}", userId, request.getSessionId(), request.getMessage());
+        log.info("用户 {} 发送消息: message={}, file={}", userId, message, 
+                file != null ? file.getOriginalFilename() : "无文件");
+        
+        // 创建请求对象
+        SendMessageRequest request = new SendMessageRequest();
+        // 设置默认会话ID，因为接口不再需要传入sessionId
+        request.setSessionId("default-session-" + userId);
+        
+        // 如果有文件上传，处理文件内容
+        if (file != null && !file.isEmpty()) {
+            try {
+                // 保存文件到临时目录
+                Path tempFile = Files.createTempFile("ai-chat-", file.getOriginalFilename());
+                Files.copy(file.getInputStream(), tempFile, StandardCopyOption.REPLACE_EXISTING);
+
+                // 提取文件内容
+                String fileContent;
+                try {
+                    fileContent = tika.parseToString(tempFile);
+                } catch (TikaException e) {
+                    log.error("无法解析文件内容: ", e);
+                    throw new RuntimeException("文件内容解析失败: " + e.getMessage());
+                }
+                String mimeType = tika.detect(tempFile);
+
+                // 构建带有文件内容的提示信息
+                String prompt = String.format("""
+                    用户发送了一个文件，类型是：%s
+                    文件内容如下：
+                    ---
+                    %s
+                    ---
+                    %s
+                    
+                    请理解文件内容，并结合用户的问题进行回答。
+                    """, 
+                    mimeType,
+                    fileContent.substring(0, Math.min(fileContent.length(), 2000)),
+                    message);
+
+                // 删除临时文件
+                Files.deleteIfExists(tempFile);
+                
+                // 设置处理后的消息
+                request.setMessage(prompt);
+                
+            } catch (IOException e) {
+                log.error("文件处理失败: ", e);
+                throw new RuntimeException("文件处理失败: " + e.getMessage());
+            }
+        } else {
+            // 无文件上传，直接设置消息
+            request.setMessage(message);
+        }
+        
         return aiService.sendMessage(userId, request);
     }
     

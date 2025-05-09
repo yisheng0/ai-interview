@@ -235,15 +235,31 @@ export function get<T>(endpoint: string, urlParams?: any[], headers?: Record<str
 }
 
 /**
- * HTTP POST请求
+ * HTTP POST请求（支持文件上传）
  * @param endpoint 端点名称
  * @param data 请求数据
  * @param urlParams URL参数
  * @param headers 请求头
+ * @param isFileUpload 是否为文件上传请求
  * @returns 服务器响应
  */
-export function post<T>(endpoint: string, data?: any, urlParams?: any[], headers?: Record<string, string>): Promise<ServerResponse<T>> {
-  return request<T>(endpoint, { method: 'POST', data, headers }, urlParams);
+export function post<T>(
+  endpoint: string, 
+  data?: any, 
+  urlParams?: any[], 
+  headers?: Record<string, string>,
+  isFileUpload?: boolean
+): Promise<ServerResponse<T>> {
+  return request<T>(
+    endpoint, 
+    { 
+      method: 'POST', 
+      data, 
+      headers, 
+      isFormData: isFileUpload 
+    }, 
+    urlParams
+  );
 }
 
 /**

@@ -1,6 +1,8 @@
 package com.interviewspringboot.pojo.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -52,6 +54,18 @@ public class ResumeRequest {
      * 原始简历文件链接
      */
     private String resumeFileUrl;
+    
+    /**
+     * 创建时间（从前端接收时忽略）
+     */
+    @JsonIgnore
+    private LocalDateTime createdAt;
+    
+    /**
+     * 更新时间（从前端接收时忽略）
+     */
+    @JsonIgnore
+    private LocalDateTime updatedAt;
     
     /**
      * 教育经历

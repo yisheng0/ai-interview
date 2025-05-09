@@ -1,5 +1,6 @@
 package com.interviewspringboot.pojo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -61,10 +62,12 @@ public class Resume {
     /**
      * 创建时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime createdAt;
     
     /**
      * 更新时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime updatedAt;
 } 

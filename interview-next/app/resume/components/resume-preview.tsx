@@ -1,10 +1,10 @@
 'use client';
 
-import { 
-  Box, 
-  Paper, 
-  Typography, 
-  Divider, 
+import {
+  Box,
+  Paper,
+  Typography,
+  Divider,
   List,
   ListItem,
   ListItemText,
@@ -54,19 +54,30 @@ interface ResumePreviewProps {
  * 以预览模式展示简历内容
  */
 export default function ResumePreview({ resumeData }: ResumePreviewProps) {
-  const { name, phone, email, education, workExperience, skills, selfDescription } = resumeData;
-  
+  // 确保resumeData存在且各个字段有效
+  const {
+    name = '',
+    phone = '',
+    email = '',
+    selfDescription = ''
+  } = resumeData || {};
+
+  // 确保数组类型字段有效
+  const education = Array.isArray(resumeData?.education) ? resumeData.education : [];
+  const workExperience = Array.isArray(resumeData?.workExperience) ? resumeData.workExperience : [];
+  const skills = Array.isArray(resumeData?.skills) ? resumeData.skills : [];
+
   // 打印简历
   const handlePrint = () => {
     window.print();
   };
-  
+
   return (
-    <Paper 
-      elevation={3} 
-      sx={{ 
-        p: 4, 
-        minHeight: '100%', 
+    <Paper
+      elevation={3}
+      sx={{
+        p: 3,
+        minHeight: '100%',
         position: 'sticky',
         top: 16,
         '@media print': {
@@ -80,8 +91,9 @@ export default function ResumePreview({ resumeData }: ResumePreviewProps) {
           variant="outlined"
           startIcon={<DownloadIcon />}
           onClick={handlePrint}
-          sx={{ 
+          sx={{
             float: 'right',
+            mb: 0,
             '@media print': {
               display: 'none'
             }
@@ -89,23 +101,21 @@ export default function ResumePreview({ resumeData }: ResumePreviewProps) {
         >
           打印/导出PDF
         </Button>
-        <Typography variant="h5" align="center" gutterBottom>
-          个人简历
-        </Typography>
       </Box>
-      
+
       {/* 个人信息 */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', mb: 3 }}>
+        <Typography variant="subtitle1" color="text.secondary" component="span">
           {name || '姓名'}
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          {phone && `电话: ${phone}`} {phone && email && '|'} {email && `邮箱: ${email}`}
+          <br />
+          电话: {phone || '无'}
+          <br />
+          邮箱: {email || '无'}
         </Typography>
       </Box>
-      
+
       <Divider sx={{ my: 2 }} />
-      
+
       {/* 自我介绍 */}
       {selfDescription && (
         <Box sx={{ mb: 3 }}>
@@ -117,7 +127,7 @@ export default function ResumePreview({ resumeData }: ResumePreviewProps) {
           </Typography>
         </Box>
       )}
-      
+
       {/* 教育经历 */}
       {education.length > 0 && (
         <Box sx={{ mb: 3 }}>
@@ -151,7 +161,7 @@ export default function ResumePreview({ resumeData }: ResumePreviewProps) {
           </List>
         </Box>
       )}
-      
+
       {/* 工作经验 */}
       {workExperience.length > 0 && (
         <Box sx={{ mb: 3 }}>
@@ -182,7 +192,7 @@ export default function ResumePreview({ resumeData }: ResumePreviewProps) {
           </Stack>
         </Box>
       )}
-      
+
       {/* 技能标签 */}
       {skills.length > 0 && (
         <Box sx={{ mb: 3 }}>
@@ -196,7 +206,7 @@ export default function ResumePreview({ resumeData }: ResumePreviewProps) {
           </Box>
         </Box>
       )}
-      
+
       {/* 打印样式 */}
       <style jsx global>{`
         @media print {

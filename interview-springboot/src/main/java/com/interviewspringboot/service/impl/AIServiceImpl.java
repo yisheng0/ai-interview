@@ -121,8 +121,18 @@ public class AIServiceImpl implements AIService {
      */
     @Override
     public Result<MessageResponse> sendMessage(Long userId, SendMessageRequest request) {
+        String sessionId = request.getSessionId();
+        if (sessionId == null || sessionId.isEmpty()) {
+            log.warn("未提供sessionId，将使用默认会话ID");
+            sessionId = "default-session-" + userId;
+            request.setSessionId(sessionId);
+        }
+        
+        log.info("用户 {} 发送消息: sessionId={}, message长度={}", userId, sessionId, 
+                request.getMessage() != null ? request.getMessage().length() : 0);
+        
         // 获取会话上下文
-        MessageManager messageManager = getOrCreateMessageManager(request.getSessionId());
+        MessageManager messageManager = getOrCreateMessageManager(sessionId);
         
         try {
             // 添加用户消息
@@ -132,16 +142,19 @@ public class AIServiceImpl implements AIService {
                     .build();
             messageManager.add(userMsg);
             
-            // 获取会话记录
-            InterviewConversation conversation = conversationMapper.selectBySessionId(request.getSessionId());
-            if (conversation == null) {
-                return Result.error("会话不存在");
-            }
-            
-            // 验证用户权限
-            Interview interview = interviewMapper.selectById(conversation.getInterviewId());
-            if (interview == null || !Objects.equals(interview.getUserId(), userId)) {
-                return Result.error("无权访问该会话");
+            // 如果不是默认会话，则验证会话权限
+            if (!sessionId.startsWith("default-session-")) {
+                // 获取会话记录
+                InterviewConversation conversation = conversationMapper.selectBySessionId(sessionId);
+                if (conversation == null) {
+                    return Result.error("会话不存在");
+                }
+                
+                // 验证用户权限
+                Interview interview = interviewMapper.selectById(conversation.getInterviewId());
+                if (interview == null || !Objects.equals(interview.getUserId(), userId)) {
+                    return Result.error("无权访问该会话");
+                }
             }
             
             // 调用通义千问API
@@ -166,7 +179,7 @@ public class AIServiceImpl implements AIService {
             // 注意：不再更新数据库中的对话记录
             // 对话记录将只在saveConversation方法中更新
             
-            return Result.success(new MessageResponse(response));
+            return Result.success(MessageResponse.builder().reply(response).containsImageAnalysis(false).build());
             
         } catch (Exception e) {
             log.error("发送消息失败", e);
@@ -353,6 +366,28 @@ public class AIServiceImpl implements AIService {
      * 获取或创建消息管理器
      */
     private MessageManager getOrCreateMessageManager(String sessionId) {
+        // 如果sessionId是默认会话ID（以"default-session-"开头）,需要特殊处理
+        if (sessionId != null && sessionId.startsWith("default-session-")) {
+            // 检查是否已有该默认会话上下文
+            if (sessionContexts.containsKey(sessionId)) {
+                return sessionContexts.get(sessionId);
+            }
+            
+            // 为默认会话创建新的消息管理器
+            MessageManager messageManager = new MessageManager(20);
+            
+            // 添加系统提示语
+            Message systemMsg = Message.builder()
+                    .role(Role.SYSTEM.getValue())
+                    .content("你是一位智能助手，可以回答用户的各种问题。")
+                    .build();
+            messageManager.add(systemMsg);
+            
+            // 保存到会话上下文
+            sessionContexts.put(sessionId, messageManager);
+            return messageManager;
+        }
+        
         // 如果已有会话上下文，直接返回
         if (sessionContexts.containsKey(sessionId)) {
             return sessionContexts.get(sessionId);

@@ -34,7 +34,10 @@ interface EducationSectionProps {
  * 教育经历组件
  * 支持添加、编辑和删除多条教育经历
  */
-export default function EducationSection({ education, onChange }: EducationSectionProps) {
+export default function EducationSection({ education = [], onChange }: EducationSectionProps) {
+  // 确保education是数组
+  const educationList = Array.isArray(education) ? education : [];
+  
   // 初始化一个空的教育经历对象
   const emptyEducation: Education = {
     id: Date.now().toString(),
@@ -68,12 +71,12 @@ export default function EducationSection({ education, onChange }: EducationSecti
     let updatedEducation;
     if (isEditing) {
       // 更新已有记录
-      updatedEducation = education.map(item => 
+      updatedEducation = educationList.map(item => 
         item.id === currentEducation.id ? currentEducation : item
       );
     } else {
       // 添加新记录
-      updatedEducation = [...education, { ...currentEducation, id: Date.now().toString() }];
+      updatedEducation = [...educationList, { ...currentEducation, id: Date.now().toString() }];
     }
     
     onChange(updatedEducation);
@@ -90,7 +93,7 @@ export default function EducationSection({ education, onChange }: EducationSecti
   // 删除教育经历
   const handleDelete = (id: string | undefined) => {
     if (!id) return;
-    const updatedEducation = education.filter(item => item.id !== id);
+    const updatedEducation = educationList.filter(item => item.id !== id);
     onChange(updatedEducation);
   };
   
@@ -184,15 +187,15 @@ export default function EducationSection({ education, onChange }: EducationSecti
       
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
-          已添加教育经历({education.length})
+          已添加教育经历({educationList.length})
         </Typography>
         
-        {education.length === 0 ? (
+        {educationList.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             尚未添加任何教育经历
           </Typography>
         ) : (
-          education.map((edu, index) => (
+          educationList.map((edu, index) => (
             <Card key={edu.id || index} sx={{ mb: 2 }}>
               <CardContent>
                 <Grid container>

@@ -34,33 +34,36 @@ interface SkillsSectionProps {
  * 技能组件
  * 支持添加多个技能标签，带有推荐功能
  */
-export default function SkillsSection({ skills, onChange }: SkillsSectionProps) {
+export default function SkillsSection({ skills = [], onChange }: SkillsSectionProps) {
+  // 确保skills是数组
+  const skillsList = Array.isArray(skills) ? skills : [];
+  
   const [newSkill, setNewSkill] = useState<string>('');
   
   // 添加技能
   const handleAddSkill = () => {
-    if (!newSkill || skills.includes(newSkill)) {
+    if (!newSkill || skillsList.includes(newSkill)) {
       return;
     }
     
-    const updatedSkills = [...skills, newSkill];
+    const updatedSkills = [...skillsList, newSkill];
     onChange(updatedSkills);
     setNewSkill('');
   };
   
   // 删除技能
   const handleDeleteSkill = (skill: string) => {
-    const updatedSkills = skills.filter(item => item !== skill);
+    const updatedSkills = skillsList.filter(item => item !== skill);
     onChange(updatedSkills);
   };
   
   // 添加推荐技能
   const handleAddSuggested = (skill: string) => {
-    if (skills.includes(skill)) {
+    if (skillsList.includes(skill)) {
       return;
     }
     
-    const updatedSkills = [...skills, skill];
+    const updatedSkills = [...skillsList, skill];
     onChange(updatedSkills);
   };
   
@@ -89,7 +92,7 @@ export default function SkillsSection({ skills, onChange }: SkillsSectionProps) 
           color="primary"
           startIcon={<AddIcon />}
           onClick={handleAddSkill}
-          disabled={!newSkill || skills.includes(newSkill)}
+          disabled={!newSkill || skillsList.includes(newSkill)}
         >
           添加
         </Button>
@@ -97,9 +100,9 @@ export default function SkillsSection({ skills, onChange }: SkillsSectionProps) 
       
       {/* 已添加技能 */}
       <Paper variant="outlined" sx={{ p: 2, mb: 3, minHeight: '100px' }}>
-        {skills.length > 0 ? (
+        {skillsList.length > 0 ? (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {skills.map((skill, index) => (
+            {skillsList.map((skill, index) => (
               <Chip
                 key={index}
                 label={skill}
@@ -122,7 +125,7 @@ export default function SkillsSection({ skills, onChange }: SkillsSectionProps) 
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         {suggestedSkills
-          .filter(skill => !skills.includes(skill))
+          .filter(skill => !skillsList.includes(skill))
           .slice(0, 15)
           .map((skill, index) => (
             <Chip
@@ -140,7 +143,7 @@ export default function SkillsSection({ skills, onChange }: SkillsSectionProps) 
       <Box sx={{ mt: 4 }}>
         <Autocomplete
           freeSolo
-          options={suggestedSkills.filter(skill => !skills.includes(skill))}
+          options={suggestedSkills.filter(skill => !skillsList.includes(skill))}
           renderInput={(params) => (
             <TextField {...params} label="搜索技能" variant="outlined" />
           )}
