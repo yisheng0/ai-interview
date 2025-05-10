@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { Interview } from './interview-store';
+import { LegacyInterview, convertToLegacyInterview } from './interview-store';
+import { Interview } from '@/api/services/interviewService';
 
 /**
  * 对话框状态存储接口
@@ -11,8 +12,8 @@ interface ModalStore {
   closeInterviewAgendaDetailDialog: () => void;
   
   // 当前选中的面试数据
-  currentDialogInterview: Interview | null;
-  setCurrentDialogInterview: (interview: Interview | null) => void;
+  currentDialogInterview: LegacyInterview | null;
+  setCurrentDialogInterview: (interview: LegacyInterview | null) => void;
   clearCurrentDialogInterview: () => void;
 }
 
@@ -24,7 +25,7 @@ export const useModalStore = create<ModalStore>()((set) => ({
   isInterviewAgendaDetailDialogOpen: false,
   openInterviewAgendaDetailDialog: (interview = null) => set({ 
     isInterviewAgendaDetailDialogOpen: true,
-    currentDialogInterview: interview
+    currentDialogInterview: interview ? convertToLegacyInterview(interview) : null
   }),
   closeInterviewAgendaDetailDialog: () => set({ 
     isInterviewAgendaDetailDialogOpen: false,

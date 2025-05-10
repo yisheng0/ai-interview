@@ -1,22 +1,19 @@
 'use client';
 
-import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
-import { useMemo } from 'react';
+import { Box, Divider, Paper, Stack, Typography, Button } from '@mui/material';
+import { useMemo, useState } from 'react';
+import { InterviewStatus, Interview, RoundStatus } from '@/api/services/interviewService';
+import { useInterviewStore } from '@/state/interview-store';
+import { useModalStore } from '@/state/dialog-store';
+import { format } from 'date-fns';
+import { zhCN } from 'date-fns/locale/zh-CN';
+import { clientLogger } from '@/utils/logger';
 
 /**
  * 面试列表组件属性接口
  */
 interface InterviewListProps {
-  interviewList: any[];
-}
-
-/**
- * 面试状态枚举
- */
-enum InterviewStatus {
-  IN_PROGRESS = 'IN_PROGRESS',
-  PASS = 'PASS',
-  TERMINATE = 'TERMINATE',
+  interviewList: Interview[];
 }
 
 /**
@@ -30,12 +27,12 @@ const statusConfig: Record<
     bgColor: string;
   }
 > = {
-  [InterviewStatus.IN_PROGRESS]: { text: '进行中', color: '', bgColor: '' },
-  [InterviewStatus.PASS]: { text: '已通过', color: 'success.main', bgColor: 'rgba(76, 175, 80, 0.1)' },
-  [InterviewStatus.TERMINATE]: {
-    text: '已终止',
-    color: 'neutral.main',
-    bgColor: 'rgba(158, 158, 158, 0.1)',
+  [InterviewStatus.ONGOING]: { text: '进行中', color: 'info.main', bgColor: 'rgba(33, 150, 243, 0.1)' },
+  [InterviewStatus.COMPLETED]: { text: '已通过', color: 'success.main', bgColor: 'rgba(76, 175, 80, 0.1)' },
+  [InterviewStatus.FAILED]: {
+    text: '未通过',
+    color: 'error.main',
+    bgColor: 'rgba(244, 67, 54, 0.1)',
   },
 };
 
@@ -46,18 +43,78 @@ const colorSequence = ['secondary.main', 'primary.main', 'warning.main', 'info.m
  * 单个面试项组件
  */
 interface InterviewItemProps {
-  item: any;
+  interview: Interview;
   index: number;
-  status: InterviewStatus;
-  onClick: (uuid: string) => void;
+  onClick: (interview: Interview) => void;
   isLastItem?: boolean;
 }
 
-function InterviewItem({ item, index, status, onClick, isLastItem = false }: InterviewItemProps) {
+function InterviewItem({ interview, index, onClick, isLastItem = false }: InterviewItemProps) {
+  // 获取最新的面试轮次
+  const latestRound = useMemo(() => {
+    if (!interview.rounds || interview.rounds.length === 0) return null;
+    
+    // 按轮次号排序，取最大的
+    return interview.rounds.sort((a, b) => b.roundNumber - a.roundNumber)[0];
+  }, [interview]);
+
+  // 格式化日期
+  const formattedDate = useMemo(() => {
+    if (!latestRound?.scheduledTime) return '';
+
+    try {
+      // 尝试判断scheduledTime格式
+      let dateObj;
+      const scheduledTime = latestRound.scheduledTime;
+
+      if (Array.isArray(scheduledTime) && scheduledTime.length >= 3) {
+        // 处理数组格式 [year, month, day, hour, minute, second]
+        // Date 构造函数中月份参数是 0-indexed
+        dateObj = new Date(
+          scheduledTime[0],      // year
+          scheduledTime[1] - 1,  // month (0-indexed)
+          scheduledTime[2],      // day
+          scheduledTime[3] || 0, // hour (optional)
+          scheduledTime[4] || 0, // minute (optional)
+          scheduledTime[5] || 0  // second (optional)
+        );
+      } else if (/^\d{10,}$/.test(scheduledTime.toString())) {
+        // 如果是纯数字且长度大于等于10，可能是时间戳
+        const timestamp = parseInt(scheduledTime.toString());
+        dateObj = new Date(timestamp);
+      } else {
+        // 否则尝试标准日期格式解析
+        dateObj = new Date(scheduledTime);
+      }
+
+      // 检查日期是否有效
+      if (isNaN(dateObj.getTime())) {
+        throw new Error('无效日期');
+      }
+
+      return format(dateObj, 'yyyy/MM/dd', { locale: zhCN });
+    } catch (error) {
+      clientLogger.error('日期格式化错误', { scheduledTime: latestRound.scheduledTime, error });
+      // 显示原始格式但尝试格式化
+      if (typeof latestRound.scheduledTime === 'string' && latestRound.scheduledTime.length > 8) {
+        try {
+          // 尝试格式化纯数字字符串
+          if (/^\d+$/.test(latestRound.scheduledTime)) {
+            // 简化处理，只要是数字串就尝试格式化前8位为日期
+            return `${latestRound.scheduledTime.slice(0,4)}/${latestRound.scheduledTime.slice(4,6)}/${latestRound.scheduledTime.slice(6,8)}`;
+          }
+        } catch (e) {
+          // 格式化失败，返回原样
+        }
+      }
+      return latestRound.scheduledTime?.toString() || '';
+    }
+  }, [latestRound]);
+
   return (
     <>
       <Box
-        onClick={() => onClick(item.uuid || '1')}
+        onClick={() => onClick(interview)}
         sx={{
           cursor: 'pointer',
           bgcolor: 'background.paper',
@@ -75,9 +132,9 @@ function InterviewItem({ item, index, status, onClick, isLastItem = false }: Int
               width: '4px',
               height: '62px',
               bgcolor:
-                status === InterviewStatus.IN_PROGRESS
+                interview.status === InterviewStatus.ONGOING
                   ? colorSequence[index % colorSequence.length]
-                  : statusConfig[status].color,
+                  : statusConfig[interview.status].color,
             }}
           />
 
@@ -106,10 +163,10 @@ function InterviewItem({ item, index, status, onClick, isLastItem = false }: Int
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  示例公司
+                  {interview.company}
                 </Typography>
 
-                {status === InterviewStatus.IN_PROGRESS && (
+                {interview.status === InterviewStatus.ONGOING && latestRound && (
                   <Box
                     sx={{
                       px: 1,
@@ -119,30 +176,29 @@ function InterviewItem({ item, index, status, onClick, isLastItem = false }: Int
                     }}
                   >
                     <Typography variant="body2" color="info.main">
-                      一面
+                      {latestRound.roundNumber === 1 ? '一面' : 
+                       latestRound.roundNumber === 2 ? '二面' : 
+                       latestRound.roundNumber === 3 ? '三面' : 
+                       `${latestRound.roundNumber}面`}
                     </Typography>
                   </Box>
                 )}
 
-                {status !== InterviewStatus.IN_PROGRESS && (
+                {interview.status !== InterviewStatus.ONGOING && (
                   <Box
                     sx={{
                       ml: 0.5,
                       px: 1,
-                      bgcolor: statusConfig[status].bgColor,
+                      bgcolor: statusConfig[interview.status].bgColor,
                       borderRadius: 1,
                       display: 'flex',
                     }}
                   >
                     <Typography
                       variant="body2"
-                      color={
-                        status === InterviewStatus.TERMINATE
-                          ? 'text.primary'
-                          : statusConfig[status].color
-                      }
+                      color={statusConfig[interview.status].color}
                     >
-                      {statusConfig[status].text}
+                      {statusConfig[interview.status].text}
                     </Typography>
                   </Box>
                 )}
@@ -159,7 +215,7 @@ function InterviewItem({ item, index, status, onClick, isLastItem = false }: Int
                   whiteSpace: 'nowrap',
                 }}
               >
-                前端开发工程师
+                {interview.position}
               </Typography>
             </Box>
 
@@ -172,58 +228,17 @@ function InterviewItem({ item, index, status, onClick, isLastItem = false }: Int
                 mr: 2,
               }}
             >
-              <Typography variant="body2" color="info.main">
-                7月15日 14:30
-              </Typography>
+              {latestRound && (
+                <Typography variant="body2" color="info.main">
+                  {formattedDate}
+                </Typography>
+              )}
             </Box>
           </Box>
         </Stack>
       </Box>
       {!isLastItem && <Divider sx={{ ml: '6px' }} />}
     </>
-  );
-}
-
-/**
- * 面试状态区块组件
- */
-interface InterviewSectionProps {
-  title: string;
-  status: InterviewStatus;
-  onItemClick: (uuid: string) => void;
-}
-
-function InterviewSection({ title, status, onItemClick }: InterviewSectionProps) {
-  // 每个状态展示2个示例项目
-  return (
-    <Box sx={{ mb: 3, bgcolor: 'background.paper', borderRadius: '8px' }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="start"
-        sx={{ ml: 1, height: '30px' }}
-      >
-        <Typography variant="body2" color="text.secondary">
-          {title}
-        </Typography>
-      </Stack>
-      <InterviewItem
-        key={`${status}-1`}
-        item={{ uuid: `${status}-1` }}
-        index={0}
-        status={status}
-        onClick={onItemClick}
-        isLastItem={false}
-      />
-      <InterviewItem
-        key={`${status}-2`}
-        item={{ uuid: `${status}-2` }}
-        index={1}
-        status={status}
-        onClick={onItemClick}
-        isLastItem={true}
-      />
-    </Box>
   );
 }
 
@@ -236,11 +251,29 @@ function InterviewSection({ title, status, onItemClick }: InterviewSectionProps)
  * @returns {JSX.Element} 面试列表组件
  */
 export default function InterviewList({ interviewList }: InterviewListProps) {
-  // 处理点击面试项
-  const handleInterviewClick = (uuid: string) => {
-    console.log('点击了面试项:', uuid);
-  };
+  const { setCurrentInterview } = useInterviewStore();
+  const { openInterviewAgendaDetailDialog } = useModalStore();
+  
+  // 按状态分组面试
+  const groupedInterviews = useMemo(() => {
+    const grouped = {
+      [InterviewStatus.ONGOING]: [] as Interview[],
+      [InterviewStatus.COMPLETED]: [] as Interview[],
+      [InterviewStatus.FAILED]: [] as Interview[],
+    };
+    
+    interviewList.forEach(interview => {
+      grouped[interview.status].push(interview);
+    });
+    
+    return grouped;
+  }, [interviewList]);
 
+  // 处理点击面试项
+  const handleInterviewClick = (interview: Interview) => {
+    setCurrentInterview(interview);
+  };
+  
   return (
     <Paper
       elevation={0}
@@ -248,33 +281,104 @@ export default function InterviewList({ interviewList }: InterviewListProps) {
         height: '100%',
         borderRadius: 2,
         overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: (theme) => theme.palette.background.default,
+        mt: 2,
       }}
     >
-      {/* 面试列表 */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+      {/* 面试列表头部 */}
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          p: 2
+        }}
+      >
+        <Typography variant="h6" fontWeight="bold">
+          面试日程
+        </Typography>
+      </Box>
+      
+      <Divider />
+      
+      {/* 面试列表内容 */}
+      <Box sx={{ p: 2, maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
         {/* 进行中的面试 */}
-        <InterviewSection
-          title="进行中"
-          status={InterviewStatus.IN_PROGRESS}
-          onItemClick={handleInterviewClick}
-        />
-
+        {groupedInterviews[InterviewStatus.ONGOING].length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, ml: 1 }}>
+              进行中
+            </Typography>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+              {groupedInterviews[InterviewStatus.ONGOING].map((interview, index) => (
+                <InterviewItem
+                  key={interview.id}
+                  interview={interview}
+                  index={index}
+                  onClick={handleInterviewClick}
+                  isLastItem={index === groupedInterviews[InterviewStatus.ONGOING].length - 1}
+                />
+              ))}
+            </Paper>
+          </Box>
+        )}
+        
         {/* 已通过的面试 */}
-        <InterviewSection
-          title="已通过"
-          status={InterviewStatus.PASS}
-          onItemClick={handleInterviewClick}
-        />
-
-        {/* 已终止的面试 */}
-        <InterviewSection
-          title="已终止" 
-          status={InterviewStatus.TERMINATE}
-          onItemClick={handleInterviewClick}
-        />
+        {groupedInterviews[InterviewStatus.COMPLETED].length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, ml: 1 }}>
+              已通过
+            </Typography>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+              {groupedInterviews[InterviewStatus.COMPLETED].map((interview, index) => (
+                <InterviewItem
+                  key={interview.id}
+                  interview={interview}
+                  index={index}
+                  onClick={handleInterviewClick}
+                  isLastItem={index === groupedInterviews[InterviewStatus.COMPLETED].length - 1}
+                />
+              ))}
+            </Paper>
+          </Box>
+        )}
+        
+        {/* 未通过的面试 */}
+        {groupedInterviews[InterviewStatus.FAILED].length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, ml: 1 }}>
+              未通过
+            </Typography>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+              {groupedInterviews[InterviewStatus.FAILED].map((interview, index) => (
+                <InterviewItem
+                  key={interview.id}
+                  interview={interview}
+                  index={index}
+                  onClick={handleInterviewClick}
+                  isLastItem={index === groupedInterviews[InterviewStatus.FAILED].length - 1}
+                />
+              ))}
+            </Paper>
+          </Box>
+        )}
+        
+        {/* 没有面试数据时显示提示 */}
+        {interviewList.length === 0 && (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            alignItems: 'center', 
+            justifyContent: 'center',
+            height: '200px'
+          }}>
+            <Typography variant="body1" color="text.secondary">
+              你还没有面试日程
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              点击"新建面试"开始准备你的面试吧
+            </Typography>
+          </Box>
+        )}
       </Box>
     </Paper>
   );

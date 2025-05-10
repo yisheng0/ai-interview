@@ -1,4 +1,5 @@
 import InterviewAgendaClientModule from './client';
+import { getInterviewList } from '@/api/services/interviewService';
 
 /**
  * 添加动态渲染配置
@@ -10,8 +11,10 @@ export const dynamic = 'force-dynamic';
  * @returns 面试日程页面组件
  */
 export default async function InterviewAgendaPage() {
-  // 模拟数据 - 后续会接入真实API
-  const interviewList = [];
+  // 获取面试列表数据
+  const interviewList = await getInterviewList();
+  
+  // TODO: 后续接入简历和余额相关API
   const resumeInfo = null;
   const interviewBalanceInfo = { balance: 0 };
 

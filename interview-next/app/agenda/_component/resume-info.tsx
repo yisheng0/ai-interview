@@ -5,9 +5,9 @@ import editSvg from '@/public/svg/interview-agenda-edtior.svg';
 import interSvg from '@/public/svg/interview-agenda-inter.svg';
 import resumeSvg from '@/public/svg/interview-agenda-resume.svg';
 import Image from 'next/image';
-import { InterviewStatus, type Interview } from '@/state/interview-store';
 import { useModalStore } from '@/state/dialog-store';
 import { useRouter } from 'next/navigation';
+import { InterviewStatus, RoundStatus, Interview } from '@/api/services/interviewService';
 
 /**
  * 简历信息卡片组件
@@ -30,7 +30,10 @@ export default function ResumeInfo() {
    * 处理点击创建岗位按钮
    * 打开创建面试对话框
    */
-  const handleCreatePosition = () => {
+  const handleCreatePosition = (e: React.MouseEvent) => {
+    // 阻止默认行为，防止触发RSC刷新
+    e.preventDefault();
+    
     // 打开空白的创建面试对话框
     openInterviewAgendaDetailDialog(null);
   };
@@ -39,19 +42,21 @@ export default function ResumeInfo() {
    * 处理点击快速面试按钮
    * 创建一个默认面试并直接进入面试
    */
-  const handleQuickInterview = async () => {
+  const handleQuickInterview = async (e: React.MouseEvent) => {
+    // 阻止默认行为，防止触发RSC刷新
+    e.preventDefault();
+    
     // 预填充默认面试数据
     const quickInterviewData: Interview = {
-      company_name: '快速面试',
-      job_title: '前端开发工程师',
-      introduction: '这是一个快速面试，无需详细设置即可开始。',
-      interview_status: InterviewStatus.IN_PROGRESS,
-      interview_round_list: [
+      company: '快速面试',
+      position: '前端开发工程师',
+      description: '这是一个快速面试，无需详细设置即可开始。',
+      status: InterviewStatus.ONGOING,
+      rounds: [
         {
-          round_no: 1,
-          round_name: '面试官提问',
-          start_time: new Date().toISOString(),
-          end_time: new Date(Date.now() + 3600000).toISOString(), // 1小时后
+          roundNumber: 1,
+          scheduledTime: new Date().toISOString(),
+          status: RoundStatus.PENDING
         }
       ]
     };

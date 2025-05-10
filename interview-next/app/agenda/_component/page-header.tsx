@@ -45,13 +45,6 @@ export default function PageHeader({ interviewTimeBalance = 0 }: PageHeaderProps
 
       {/* 右侧：用户信息和面试时长 */}
       <Stack direction="row" alignItems="center" spacing={3}>
-        {/* 面试时长 */}
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ cursor: 'pointer' }}>
-          <Typography variant="body1" color="primary" sx={{ fontWeight: 600 }}>
-            <span style={{ fontWeight: '400' }}>剩余面试时长</span>{' '}
-            {interviewTimeBalance}分钟
-          </Typography>
-        </Stack>
         {/* 主题切换 */}
         <ThemeToggle />
         {/* 用户头像 */}

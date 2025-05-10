@@ -25,9 +25,13 @@ interface InterviewSessionClientModuleProps {
    */
   sessionUuid: string;
   /**
-   * 面试会话计费ID
+   * 面试ID
    */
-  sessionBillingUuid: string;
+  interviewId?: string;
+  /**
+   * 轮次ID
+   */
+  roundId?: string;
 }
 
 /**
@@ -67,44 +71,12 @@ interface ChatMessage {
 }
 
 /**
- * 模拟请求AI回复
- * @param question 问题文本
- * @returns 模拟的AI回复和分析
- */
-const mockAIResponse = async (question: string): Promise<{ response: string; analysis: string }> => {
-  // 模拟网络延迟
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  // 根据问题内容返回不同的模拟回复
-  if (question.includes('介绍') || question.includes('自我')) {
-    return {
-      response: '各位面试官好，我是陈迪，安徽理工大学​​地理空间信息工程​​专业在读本科生，主攻​​前端开发​​方向，熟悉 ​​Vue3​​、​​React​​ 技术栈，有​​小红书​​和​​自动驾驶​​领域的两段中大型项目实战经验。在技术能力方面，我擅长通过​​工程化思维​​解决复杂场景需求。比如在​​小红书开放平台​​项目中，我独立完成从 ​​OCR验证组件封装​​ 到 ​​AI客服功能​​ 的全流程开发，利用 ​​SSE​​ 实现大模型流式响应，通过交互链路优化将工单处理效率​​提升30%​​。这段经历让我沉淀了​​复杂表单状态管理​​和​​高并发场景优化​​经验。在​​自动驾驶领域​​实习期间，我主导了 ​​PhiX播放工具​​ 的性能优化：针对 ​​3D视图卡顿​​ 问题，通过 ​​Three.js渲染管线优化​​ 和​​虚拟滚动技术​​，将万级数据量下的 ​​FPS从12提升至45​​；重构 ​​Echarts封装层​​ 时引入​​策略模式​​，使图表扩展成本​​降低60%​​。这让我对​​数据可视化领域​​有了更深层的架构理解。学术方面，我参与过校企合作的​​二三维管线可视化项目​​，负责 ​​Cesium功能模块封装​​ 和 ​​Echarts大屏适配方案​​。通过调研 ​​Proj4库​​ 实现坐标转换通用组件，解决​​三维空间分析精度​​问题，最终系统被合作方纳入​​生产环境​​使用。个人持续保持技术输出，独立开发的​​全栈写作平台​​已接入​​讯飞大模型API​​，采用 ​​JWT+动态路由​​ 方案实现权限体系，​​SSE流式输出​​使AI生成响应速度​​提升2倍​​。这个项目在 ​​GitHub​​ 获得​​12个star​​，目前正在迭代​​可视化编辑器模块​​。我的优势在于既能快速理解业务场景，又能通过技术选型创造业务价值。希望能有机会用我的技术能力为贵司项目带来实质性提升。',
-      analysis: '自我介绍应突出个人技能和经验，可以按照"个人身份-擅长技术-项目经验-成就"的顺序展开。'
-    };
-  } else if (question.includes('项目') || question.includes('经验')) {
-    return {
-      response: '我主要参与过电商平台、企业管理系统和在线教育平台三个大型项目。其中在电商平台项目中，我负责前端架构和核心购物流程开发，使用React+TypeScript构建了高复用性组件库，并通过虚拟滚动和懒加载技术使页面加载速度提升了40%。',
-      analysis: '项目经验介绍应包含"项目背景-个人职责-使用技术-解决难点-项目成果"，突出技术难点和个人贡献。'
-    };
-  } else if (question.includes('技术') || question.includes('栈')) {
-    return {
-      response: '我的主要技术栈包括：前端框架React、Vue.js，语言TypeScript，构建工具Webpack、Vite，UI库Material UI、Ant Design，状态管理Redux、Mobx，服务端渲染Next.js等。后端有Node.js和Express经验，数据库使用过MongoDB和MySQL。',
-      analysis: '技术栈介绍应从前端-后端-数据库有层次地展开，要点是展示技术广度和深度，可适当补充对各技术的理解。'
-    };
-  } else {
-    return {
-      response: '对于这个问题，我认为需要结合具体情境进行分析。在我的工作经验中，我始终注重技术与业务的结合，通过不断学习和实践来提升自己的能力和价值。',
-      analysis: '对于开放性问题，可以先表明观点，然后结合个人经验进行阐述，最后给出自己的见解或总结。'
-    };
-  }
-};
-
-/**
  * 面试会话客户端模块
  */
 export default function InterviewSessionClientModule({
   sessionUuid,
-  sessionBillingUuid,
+  interviewId,
+  roundId
 }: InterviewSessionClientModuleProps) {
   const router = useRouter();
   
@@ -185,7 +157,7 @@ export default function InterviewSessionClientModule({
    * 创建面试会话
    * 当没有传入会话ID时，创建新的会话
    */
-  const createInterviewSession = async (interviewId: string = '7', roundId: string = '4') => {
+  const createInterviewSession = async (interviewId: string, roundId: string) => {
     try {
       setIsCreatingSession(true);
       setSessionError(null);
@@ -572,26 +544,22 @@ export default function InterviewSessionClientModule({
         clientLogger.info('已有活跃会话，无需创建');
         return;
       }
-      
       // 传入的sessionUuid优先使用
       if (sessionUuid) {
         clientLogger.info('使用传入的会话ID:', sessionUuid);
         setSessionId(sessionUuid);
       } else {
-        // 无会话ID，需要创建新会话
-        clientLogger.info('没有会话ID，创建新会话');
-        const newSessionId = await createInterviewSession();
-        
-        // 如果创建失败，提示错误
+        // 无会话ID，需要创建新会话，优先用props传入的interviewId和roundId
+        clientLogger.info('没有会话ID，创建新会话', { interviewId, roundId });
+        const newSessionId = await createInterviewSession(interviewId, roundId);
         if (!newSessionId) {
           clientLogger.error('创建会话失败');
           // 这里可以显示错误提示或者重定向
         }
       }
     };
-    
     initSession();
-  }, [sessionUuid, hasActiveSession, setSessionId]);
+  }, [sessionUuid, hasActiveSession, setSessionId, interviewId, roundId]);
   
   // 监听语音识别状态变化
   useEffect(() => {

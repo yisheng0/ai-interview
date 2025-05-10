@@ -8,12 +8,219 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import dayjs from 'dayjs';
+import { format, parseISO } from 'date-fns';
+import { zhCN } from 'date-fns/locale/zh-CN';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import { InterviewStatus, RoundStatus, deleteInterviewRound, updateInterview, deleteInterview } from '@/api/services/interviewService';
+import { useInterviewStore } from '@/state/interview-store';
+import { useModalStore } from '@/state/dialog-store';
+import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 
 // 模拟中文数字转换
 const convertToChinese = (num: number) => {
   const chineseNums = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
   return num <= 10 ? chineseNums[num] : `${num}`;
 };
+
+/**
+ * 面试轮次卡片组件属性
+ */
+interface InterviewRoundCardProps {
+  roundNumber: number;
+  scheduledTime: string;
+  status: RoundStatus;
+  hasSession?: boolean;
+  roundId?: string;
+  sessionId?: string;
+  interviewId?: string;
+  onDelete?: () => void;
+  onStatusChange?: (newStatus: RoundStatus) => void;
+}
+
+/**
+ * 轮次状态配置
+ */
+const roundStatusConfig: Record<
+  RoundStatus,
+  {
+    text: string;
+    color: string;
+    bgColor: string;
+  }
+> = {
+  [RoundStatus.PENDING]: { text: '待进行', color: 'info.main', bgColor: 'rgba(33, 150, 243, 0.1)' },
+  [RoundStatus.ONGOING]: { text: '进行中', color: 'secondary.main', bgColor: 'rgba(156, 39, 176, 0.1)' },
+  [RoundStatus.COMPLETED]: { text: '已完成', color: 'success.main', bgColor: 'rgba(76, 175, 80, 0.1)' },
+  [RoundStatus.FAILED]: { text: '未通过', color: 'error.main', bgColor: 'rgba(244, 67, 54, 0.1)' },
+};
+
+/**
+ * 面试轮次卡片组件
+ */
+function InterviewRoundCard({ roundNumber, scheduledTime, status, hasSession = false, roundId, sessionId, interviewId, onDelete, onStatusChange, ...props }: InterviewRoundCardProps) {
+  const router = useRouter();
+
+  // 格式化日期
+  const formattedDate = (() => {
+    try {
+      // 尝试判断scheduledTime格式
+      let dateObj;
+
+      if (Array.isArray(scheduledTime) && scheduledTime.length >= 3) {
+        // 处理数组格式 [year, month, day, hour, minute, second]
+        // Date 构造函数中月份参数是 0-indexed
+        dateObj = new Date(
+          scheduledTime[0],      // year
+          scheduledTime[1] - 1,  // month (0-indexed)
+          scheduledTime[2],      // day
+          scheduledTime[3] || 0, // hour (optional)
+          scheduledTime[4] || 0, // minute (optional)
+          scheduledTime[5] || 0  // second (optional)
+        );
+      } else if (typeof scheduledTime === 'string' && /^\d{10,}$/.test(scheduledTime.toString())) {
+        // 如果是纯数字且长度大于等于10，可能是时间戳 (兼容旧数据)
+        const timestamp = parseInt(scheduledTime.toString());
+        dateObj = new Date(timestamp);
+      }
+      else {
+        // 否则尝试标准日期格式解析 (如 ISO 字符串)
+        dateObj = parseISO(scheduledTime);
+      }
+
+      // 检查日期是否有效
+      if (isNaN(dateObj.getTime())) {
+        throw new Error('无效日期');
+      }
+
+      return format(dateObj, 'yyyy/MM/dd', { locale: zhCN });
+    } catch (error) {
+      // 显示原始格式但尝试格式化
+      if (typeof scheduledTime === 'string' && scheduledTime.length >= 8) {
+        try {
+          // 尝试格式化纯数字字符串 yyyyMMdd...
+          if (/^\d+$/.test(scheduledTime)) {
+            return `${scheduledTime.slice(0, 4)}/${scheduledTime.slice(4, 6)}/${scheduledTime.slice(6, 8)}`;
+          }
+        } catch (e) {
+          // 格式化失败，返回原样
+        }
+      }
+      return scheduledTime?.toString() || '';
+    }
+  })();
+
+  // 轮次转中文
+  const roundText =
+    roundNumber === 1 ? '一面' :
+      roundNumber === 2 ? '二面' :
+        roundNumber === 3 ? '三面' : `${roundNumber}面`;
+
+  // 处理进入面试会话（带sessionId、interviewId、roundId跳转）
+  const handleEnterSession = () => {
+    // interviewId和roundId都必须有
+    if (!interviewId || !roundId) return;
+    if (sessionId) {
+      router.push(`/session?session=${sessionId}&interview=${interviewId}&round=${roundId}`);
+    } else {
+      router.push(`/session?interview=${interviewId}&round=${roundId}`);
+    }
+  };
+
+  // 轮次状态操作按钮
+  const renderStatusActions = () => {
+    if (!onStatusChange) return null;
+    if (status === RoundStatus.PENDING) {
+      return (
+        <Button size="small" onClick={() => onStatusChange(RoundStatus.ONGOING)} sx={{ ml: 1 }}>
+          开始面试
+        </Button>
+      );
+    }
+    if (status === RoundStatus.ONGOING) {
+      return (
+        <>
+          <Button size="small" color="success" onClick={() => onStatusChange(RoundStatus.COMPLETED)} sx={{ ml: 1 }}>
+            完成
+          </Button>
+          <Button size="small" color="error" onClick={() => onStatusChange(RoundStatus.FAILED)} sx={{ ml: 1 }}>
+            未通过
+          </Button>
+        </>
+      );
+    }
+    return null;
+  };
+
+  // 删除按钮
+  const renderDeleteAction = () => {
+    if (!onDelete) return null;
+    return (
+      <Button size="small" color="error" onClick={onDelete} sx={{ ml: 1 }}>
+        删除
+      </Button>
+    );
+  };
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 2,
+        mb: 2,
+        borderRadius: 2,
+        background: 'linear-gradient(to right, rgba(33, 150, 243, 0.05), transparent)',
+        cursor: hasSession ? 'pointer' : 'default',
+        '&:hover': {
+          bgcolor: hasSession ? 'action.hover' : 'transparent',
+        },
+      }}
+      onClick={handleEnterSession}
+    >
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="column" spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="subtitle1" fontWeight="medium">
+              {roundText}
+            </Typography>
+            <Box
+              sx={{
+                px: 1,
+                borderRadius: 1,
+                bgcolor: roundStatusConfig[status].bgColor,
+              }}
+            >
+              <Typography variant="body2" color={roundStatusConfig[status].color}>
+                {roundStatusConfig[status].text}
+              </Typography>
+            </Box>
+            {renderStatusActions()}
+            {renderDeleteAction()}
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            {formattedDate}
+          </Typography>
+        </Stack>
+
+        {hasSession && (
+          <Button
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 2, textTransform: 'none' }}
+            onClick={e => { e.stopPropagation(); handleEnterSession(); }}
+          >
+            进入
+          </Button>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
 
 /**
  * 面试详情组件
@@ -26,32 +233,12 @@ export default function InterviewDetail() {
   const theme = useTheme();
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const { currentInterview, setCurrentInterview } = useInterviewStore();
+  const { openInterviewAgendaDetailDialog } = useModalStore();
+  const router = useRouter();
+
   // 获取菜单打开状态
   const isMenuOpen = Boolean(menuAnchorEl);
-  
-  // 模拟面试数据
-  const currentInterview = {
-    uuid: '123',
-    company_name: '示例公司',
-    job_title: '前端开发工程师',
-    introduction: '这是一个示例岗位描述，展示了面试详情界面的布局和样式。岗位需求包括：\n1. 熟练掌握React、Vue等前端框架\n2. 良好的CSS和HTML基础\n3. 了解前端工程化和构建工具\n4. 良好的团队协作能力',
-    interview_status: 'IN_PROGRESS',
-    interview_round_list: [
-      {
-        uuid: '1',
-        round_no: 1,
-        round_name: '一面',
-        schedule_date: dayjs().add(1, 'day').toISOString()
-      },
-      {
-        uuid: '2',
-        round_no: 2,
-        round_name: '二面',
-        schedule_date: dayjs().add(3, 'day').toISOString()
-      }
-    ]
-  };
 
   // 处理打开菜单
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -66,13 +253,13 @@ export default function InterviewDetail() {
   // 处理编辑面试
   const handleEdit = () => {
     handleMenuClose();
-    console.log('编辑面试');
+    openInterviewAgendaDetailDialog(currentInterview);
   };
 
   // 处理删除面试
   const handleDelete = () => {
+    setDeleteDialogOpen(true);
     handleMenuClose();
-    console.log('删除面试');
   };
 
   // 处理更新面试状态
@@ -82,16 +269,101 @@ export default function InterviewDetail() {
 
   // 处理进入面试会话
   const handleEnterSession = () => {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      console.log('进入面试');
-    }, 1000);
+    if (!currentInterview) return;
+    // 优先取最新一轮有sessionId的轮次
+    const round = currentInterview.rounds?.slice().reverse().find(r => r.sessionId);
+    // 取最新一轮（无论有无sessionId）
+    const lastRound = currentInterview.rounds?.slice().reverse()[0];
+    const interviewId = currentInterview.id;
+    const roundId = round?.id || lastRound?.id;
+    const sessionId = round?.sessionId;
+    if (!interviewId || !roundId) return;
+    if (sessionId) {
+      router.push(`/session?session=${sessionId}&interview=${interviewId}&round=${roundId}`);
+    } else {
+      router.push(`/session?interview=${interviewId}&round=${roundId}`);
+    }
   };
 
   // 处理添加新的面试轮次
-  const handleAddNewRound = () => {
-    console.log('添加新轮次');
+  const handleAddRound = () => {
+    openInterviewAgendaDetailDialog(currentInterview);
+  };
+
+  // 删除弹窗相关状态
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); // 控制整体删除弹窗
+  const [deleteRoundId, setDeleteRoundId] = useState<string | null>(null); // 控制轮次删除弹窗
+
+  // 确认整体面试删除
+  const handleConfirmDelete = async () => {
+    if (!currentInterview?.id) return;
+    setIsSubmitting(true);
+    try {
+      const ok = await deleteInterview(currentInterview.id);
+      if (ok) {
+        toast.success('面试已删除');
+        setDeleteDialogOpen(false);
+        setCurrentInterview(null); // 清空全局当前面试
+        router.push('/agenda'); // 跳转回日程列表
+      } else {
+        toast.error('删除失败');
+      }
+    } catch (e) {
+      toast.error('删除异常');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 处理轮次删除（弹出确认）
+  const handleRoundDelete = (roundId: string) => {
+    setDeleteRoundId(roundId);
+  };
+
+  // 确认轮次删除
+  const handleConfirmRoundDelete = async () => {
+    if (!deleteRoundId || !currentInterview) return;
+    setIsSubmitting(true);
+    try {
+      const ok = await deleteInterviewRound(deleteRoundId);
+      if (ok) {
+        toast.success('轮次删除成功');
+        setDeleteRoundId(null);
+        // 本地过滤掉已删除的轮次，并同步到全局store
+        const newRounds = currentInterview.rounds.filter(r => r.id !== deleteRoundId);
+        const updated = { ...currentInterview, rounds: newRounds };
+        setCurrentInterview(updated);
+      } else {
+        toast.error('轮次删除失败');
+      }
+    } catch (e) {
+      toast.error('轮次删除异常');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 新增：处理轮次状态变更
+  const handleRoundStatusChange = async (roundId: string, newStatus: RoundStatus) => {
+    try {
+      setIsSubmitting(true);
+      if (!currentInterview?.id) return;
+      // 本地更新轮次状态
+      const newRounds = currentInterview.rounds.map(round =>
+        round.id === roundId ? { ...round, status: newStatus } : round
+      );
+      await updateInterview({
+        id: currentInterview.id,
+        rounds: newRounds.map(r => ({ id: r.id, scheduledTime: r.scheduledTime, status: r.status }))
+      });
+      toast.success('轮次状态已更新');
+      // 同步本地和全局store
+      setCurrentInterview({ ...currentInterview, rounds: newRounds });
+    } catch (error) {
+      toast.error('轮次状态更新失败');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 如果没有选中的面试，则显示空状态
@@ -107,7 +379,8 @@ export default function InterviewDetail() {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          bgcolor: 'background.paper',
+          padding: 3,
+          bgcolor: alpha(theme.palette.primary.main, 0.02),
         }}
       >
         <Typography variant="body1" color="text.secondary">
@@ -118,7 +391,7 @@ export default function InterviewDetail() {
   }
 
   // 获取面试轮次数量
-  const roundCount = currentInterview.interview_round_list?.length || 0;
+  const roundCount = currentInterview.rounds?.length || 0;
 
   return (
     <Paper
@@ -138,10 +411,6 @@ export default function InterviewDetail() {
           px: 4,
           py: 2,
           position: 'relative',
-          backgroundImage: 'url(/img/interview-detail-bg.png)',
-          backgroundPosition: 'top right',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: '120px auto',
         }}
       >
         {/* 右上角三点菜单 */}
@@ -176,7 +445,7 @@ export default function InterviewDetail() {
         {/* 公司名称和面试轮次 */}
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography variant="h5" fontWeight="medium" sx={{ fontSize: '24px', fontWeight: 600 }}>
-            {currentInterview.company_name}
+            {currentInterview.company}
           </Typography>
           <Chip
             label={`${convertToChinese(roundCount)}面`}
@@ -190,12 +459,12 @@ export default function InterviewDetail() {
           />
         </Stack>
         <Typography variant="body1" sx={{ mt: 0.5, color: 'text.secondary' }}>
-          {currentInterview.job_title}
+          {currentInterview.position}
         </Typography>
 
         {/* 状态操作tag */}
         <Stack direction="row" spacing={1.5} sx={{ mt: 1 }}>
-          {currentInterview.interview_status === 'IN_PROGRESS' ? (
+          {currentInterview.status === InterviewStatus.ONGOING ? (
             <>
               {/* 顺利通过按钮 */}
               <Button
@@ -245,7 +514,7 @@ export default function InterviewDetail() {
             /* 恢复流程按钮 */
             <Button
               variant="outlined"
-              onClick={() => handleStatusUpdate('IN_PROGRESS')}
+              onClick={() => handleStatusUpdate('ONGOING')}
               disabled={isSubmitting}
               sx={{
                 borderRadius: 4,
@@ -262,108 +531,24 @@ export default function InterviewDetail() {
 
       {/* 主体内容区域 */}
       <Box sx={{ flex: 1, overflow: 'auto', px: 4 }}>
-        {currentInterview.interview_round_list &&
-        currentInterview.interview_round_list.length > 0 ? (
+        {currentInterview.rounds && currentInterview.rounds.length > 0 ? (
           <Stack sx={{ mt: 2 }}>
-            {currentInterview.interview_round_list.map((round, index) => {
-              const isLastItem = index === currentInterview.interview_round_list.length - 1;
-              return (
-                <Box
-                  key={round.uuid || index}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    mb: 2,
-                    position: 'relative',
-                  }}
-                >
-                  {/* 连接线 - 调整间距使其均匀 */}
-                  {!isLastItem && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        left: 18,
-                        top: 36,
-                        height: '16px',
-                        width: 2,
-                        bgcolor: 'divider',
-                        zIndex: 0,
-                      }}
-                    />
-                  )}
-
-                  {/* 序号圆圈 - 只有最后一个高亮 */}
-                  <Box
-                    sx={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '50%',
-                      bgcolor: isLastItem ? 'primary.main' : 'grey.400',
-                      color: 'common.white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 2,
-                      zIndex: 1,
-                    }}
-                  >
-                    <Typography fontWeight="medium">{index + 1}</Typography>
-                  </Box>
-
-                  {/* 轮次内容 - 保持两端对齐 */}
-                  <Box
-                    sx={{
-                      flex: 1,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    {/* 左侧：轮次名称 */}
-                    <Typography fontWeight="medium">
-                      第{convertToChinese(index + 1)}轮面试
-                    </Typography>
-
-                    {/* 右侧：面试时间 */}
-                    {round.schedule_date && (
-                      <Typography variant="body2" color="text.secondary">
-                        {dayjs(round.schedule_date).format('M月D日 HH:mm')}
-                      </Typography>
-                    )}
-                  </Box>
-                </Box>
-              );
-            })}
-
-            {/* 添加下一轮按钮 - 使用虚线圆圈 */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                ml: 0,
-                cursor: 'pointer',
-                color: 'primary.main',
-              }}
-              onClick={handleAddNewRound}
-            >
-              <Box
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  border: '1px dashed',
-                  borderColor: 'primary.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 2,
-                  color: 'primary.main',
-                }}
-              >
-                <Typography>+</Typography>
-              </Box>
-              <Typography color="primary.main">添加下一轮面试</Typography>
-            </Box>
+            {currentInterview.rounds
+              .sort((a, b) => a.roundNumber - b.roundNumber)
+              .map((round) => (
+                <InterviewRoundCard
+                  key={round.id}
+                  roundNumber={round.roundNumber}
+                  scheduledTime={round.scheduledTime}
+                  status={round.status}
+                  hasSession={!!round.sessionId}
+                  roundId={round.id}
+                  sessionId={round.sessionId}
+                  interviewId={currentInterview.id}
+                  onDelete={() => round.id && handleRoundDelete(round.id)}
+                  onStatusChange={(newStatus) => round.id && handleRoundStatusChange(round.id, newStatus)}
+                />
+              ))}
           </Stack>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 2 }}>
@@ -388,20 +573,29 @@ export default function InterviewDetail() {
             mb: 3,
           }}
         >
-          {currentInterview.introduction || '暂无岗位描述'}
+          {currentInterview.description || '暂无岗位描述'}
         </Typography>
       </Box>
 
       {/* 底部操作按钮 */}
-      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, gap: 2, display: 'flex'}}>
-        <Button>回顾</Button>
+      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'end', gap: 2 }}>
+        {/* 添加轮次按钮 */}
+        {currentInterview.status === InterviewStatus.ONGOING && (
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleAddRound}
+          >
+            添加轮次
+          </Button>
+        )}
+        {/* 进入面试按钮 */}
         <Button
           variant="contained"
           color="primary"
-          fullWidth
           size="large"
           onClick={handleEnterSession}
-          disabled={isSubmitting || currentInterview.interview_status !== 'IN_PROGRESS'}
+          disabled={isSubmitting || currentInterview.status !== InterviewStatus.ONGOING}
           sx={{
             borderRadius: 2,
             py: 1.5,
@@ -412,6 +606,25 @@ export default function InterviewDetail() {
           {isSubmitting ? '处理中...' : '进入面试'}
         </Button>
       </Box>
+
+      {/* 整体删除确认弹窗 */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>确认删除面试？</DialogTitle>
+        <DialogContent>此操作不可恢复，确定要删除该面试及所有轮次吗？</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>取消</Button>
+          <Button color="error" onClick={handleConfirmDelete} disabled={isSubmitting}>确认删除</Button>
+        </DialogActions>
+      </Dialog>
+      {/* 轮次删除确认弹窗 */}
+      <Dialog open={!!deleteRoundId} onClose={() => setDeleteRoundId(null)}>
+        <DialogTitle>确认删除该轮次？</DialogTitle>
+        <DialogContent>删除后不可恢复，确定要删除此面试轮次吗？</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteRoundId(null)}>取消</Button>
+          <Button color="error" onClick={handleConfirmRoundDelete} disabled={isSubmitting}>确认删除</Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }

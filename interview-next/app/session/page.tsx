@@ -16,17 +16,19 @@ type Props = {
 /**
  * 面试会话页面
  *
- * @param searchParams 查询参数，包含sessionUuid和sessionBillingUuid
+ * @param searchParams 查询参数，包含sessionUuid
  * @returns 面试会话客户端组件
  */
 export default async function InterviewSessionPage({ searchParams }: Props) {
   const sessionUuid = (await searchParams)['session'] as string;
-  const sessionBillingUuid = (await searchParams)['billing'] as string;
+  const interviewId = (await searchParams)['interview'] as string;
+  const roundId = (await searchParams)['round'] as string;
 
   return (
     <InterviewSessionClientModule
       sessionUuid={sessionUuid}
-      sessionBillingUuid={sessionBillingUuid}
+      interviewId={interviewId}
+      roundId={roundId}
     />
   );
 }

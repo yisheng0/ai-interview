@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Divider, Stack, useTheme } from '@mui/material';
+import { Box, Divider, Stack, useTheme, useMediaQuery } from '@mui/material';
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import ConfirmDialog from './_component/confirm-dialog';
@@ -10,12 +10,14 @@ import InterviewList from './_component/interview-list';
 import PageHeader from './_component/page-header';
 import ResumeInfo from './_component/resume-info';
 import { useInterviewStore } from '@/state/interview-store';
+import { Interview } from '@/api/services/interviewService';
+import { clientLogger } from '@/utils/logger';
 
 /**
  * 面试日程页面属性接口
  */
 export interface InterviewAgendaClientModuleProps {
-  interviewList: any[];
+  interviewList: Interview[];
   resumeInfo?: any | null;
   interviewBalanceInfo: any | null;
 }
@@ -30,27 +32,29 @@ export interface InterviewAgendaClientModuleProps {
  * @returns {JSX.Element} 面试日程页面
  */
 export default function InterviewAgendaClientModule({
-  interviewList = [],
+  interviewList: initialInterviewList = [],
   resumeInfo = null,
   interviewBalanceInfo = null,
 }: InterviewAgendaClientModuleProps) {
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  const { currentInterview, setCurrentInterview } = useInterviewStore();
+  const { currentInterview, setCurrentInterview, fetchInterviews, interviews } = useInterviewStore();
+  // 响应式布局 - 小屏幕检测
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
 
   // 监听页面路径变化，保证从会话页面返回后触发重加载
   useEffect(() => {
-    router.refresh();
-  }, [pathname, router]);
+    fetchInterviews();
+    clientLogger.info('获取面试列表', interviews);
+  }, [pathname, router, fetchInterviews]);
 
   // 初始化时如果没有选中的面试，且有面试列表，则选中第一个
   useEffect(() => {
-    if (!currentInterview && interviewList.length > 0) {
-      // 由于这里只是模拟，不传任何参数
-      setCurrentInterview(interviewList[0]);
+    if (!currentInterview && interviews.length > 0) {
+      setCurrentInterview(interviews[0]);
     }
-  }, [interviewList]);
+  }, [interviews, currentInterview, setCurrentInterview]);
 
   return (
     <Box
@@ -58,8 +62,8 @@ export default function InterviewAgendaClientModule({
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
-        height: '100%',
-        bgcolor: (theme) => theme.palette.background.default,
+        height: '100vh',
+        bgcolor: theme => theme.palette.background.default,
         overflow: 'hidden',
       }}
     >
@@ -69,15 +73,37 @@ export default function InterviewAgendaClientModule({
       </Stack>
       <Divider />
       {/* 下部分：简历信息、面试列表和详情 */}
-      <Stack direction="row" sx={{ flex: 1, overflow: 'auto' }}>
-        {/* 左侧：简历信息 */}
-        <Box sx={{ width: '70%', p: 4 }}>
+      <Stack 
+        direction={isSmallScreen ? 'column' : 'row'} 
+        sx={{ 
+          flex: 1, 
+          overflow: 'auto',
+          height: 'calc(100% - 85px)' // 减去头部高度
+        }}
+      >
+        {/* 左侧：简历信息和面试列表 */}
+        <Box 
+          sx={{ 
+            width: isSmallScreen ? '100%' : '65%', 
+            p: { xs: 2, md: 4 },
+            height: isSmallScreen ? 'auto' : '100%',
+            overflowY: 'auto'
+          }}
+        >
           <ResumeInfo />
-          <InterviewList interviewList={interviewList} />
+          <InterviewList interviewList={interviews.length > 0 ? interviews : initialInterviewList} />
         </Box>
 
         {/* 右侧：面试详情 */}
-        <Box sx={{ width: '30%', p: 4 }}>
+        <Box 
+          sx={{ 
+            width: isSmallScreen ? '100%' : '35%', 
+            p: { xs: 2, md: 4 },
+            height: isSmallScreen ? 'auto' : '100%',
+            overflowY: 'auto',
+            borderLeft: isSmallScreen ? 'none' : `1px solid ${theme.palette.divider}`
+          }}
+        >
           <InterviewDetail />
         </Box>
       </Stack>

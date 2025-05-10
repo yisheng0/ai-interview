@@ -3,14 +3,15 @@
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
 import { useFormik } from 'formik';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import * as Yup from 'yup';
 import InterviewTimeSection from './interview-time-section';
 import JobInfoSection from './job-info-section';
-import { InterviewStatus, type Interview } from '@/state/interview-store';
+import { InterviewStatus, UpdateInterviewRequest, CreateInterviewRequest, createInterview, updateInterview, deleteInterview } from '@/api/services/interviewService';
 import { useModalStore } from '@/state/dialog-store';
-
+import { clientLogger } from '@/utils/logger';
+  
 /**
  * 表单验证模式
  */
@@ -22,13 +23,25 @@ const validationSchema = Yup.object({
 });
 
 /**
+ * 面试数据接口
+ */
+export interface Interview {
+  uuid?: string;
+  company_name: string;
+  job_title: string;
+  introduction: string;
+  interview_status: InterviewStatus;
+  interview_round_list: any[];
+}
+
+/**
  * 表单初始值
  */
 const initialValues: Interview = {
   company_name: '',
   job_title: '',
   introduction: '',
-  interview_status: InterviewStatus.IN_PROGRESS,
+  interview_status: InterviewStatus.ONGOING,
   interview_round_list: [],
 };
 
@@ -92,7 +105,7 @@ export default function CreateEditDialog() {
         company_name: values.company_name?.trim() || '默认公司',
         job_title: values.job_title?.trim() || '默认岗位',
         introduction: values.introduction?.trim() || '暂无描述',
-        interview_status: values.interview_status || InterviewStatus.IN_PROGRESS,
+        interview_status: values.interview_status || InterviewStatus.ONGOING,
       };
 
       // 检查面试轮次
@@ -101,11 +114,44 @@ export default function CreateEditDialog() {
         setIsSubmitting(false);
         return;
       }
+
+      // 根据模式决定是创建新面试还是更新现有面试
+      if (isEditMode && currentDialogInterview?.uuid) {
+        // 更新面试
+        const updateData: UpdateInterviewRequest = {
+          id: currentDialogInterview.uuid,
+          company: processedValues.company_name,
+          position: processedValues.job_title,
+          description: processedValues.introduction,
+          status: processedValues.interview_status,
+          rounds: processedValues.interview_round_list.map((round: any) => ({
+            id: round.id,
+            scheduledTime: round.interview_time,
+            status: round.round_status
+          }))
+        };
+        
+        await updateInterview(updateData);
+        clientLogger.info('面试更新成功', updateData);
+      } else {
+        // 创建新面试
+        const createData: CreateInterviewRequest = {
+          company: processedValues.company_name,
+          position: processedValues.job_title,
+          description: processedValues.introduction,
+          scheduledTime: processedValues.interview_round_list[0].interview_time
+        };
+        
+        await createInterview(createData);
+        clientLogger.info('面试创建成功', createData);
+      }
+      
       // 提交成功
       toast.success(isEditMode ? '面试更新成功' : '面试创建成功');
       handleClose();
       router.refresh();
     } catch (error) {
+      clientLogger.error('面试创建/更新失败', error);
       toast.error('提交失败，请重试');
     } finally {
       setIsSubmitting(false);
@@ -129,11 +175,20 @@ export default function CreateEditDialog() {
 
     try {
       setOpenDeleteConfirmDialog(false);
-
-      toast.success('删除成功');
-      handleClose();
-      router.refresh();
+      
+      // 调用删除API
+      const result = await deleteInterview(currentDialogInterview.uuid);
+      
+      if (result) {
+        clientLogger.info('面试删除成功', { id: currentDialogInterview.uuid });
+        toast.success('删除成功');
+        handleClose();
+        router.refresh();
+      } else {
+        throw new Error('删除失败');
+      }
     } catch (error) {
+      clientLogger.error('面试删除失败', error);
       toast.error('删除失败');
     }
   };

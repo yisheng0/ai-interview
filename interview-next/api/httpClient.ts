@@ -4,6 +4,16 @@ import { handleDataFetcherError, ServerResponse } from '../utils/exception-handl
 import { useAuthStore } from '../state';
 
 /**
+ * 获取API基础URL
+ * @returns API基础URL字符串
+ */
+export function getBaseUrl(): string {
+  return typeof window === 'undefined' 
+    ? 'http://localhost:3000' // 服务器端
+    : window.location.origin; // 客户端
+}
+
+/**
  * 请求参数类型
  */
 interface RequestOptions {
@@ -59,12 +69,15 @@ const getToken = (): string | null => {
 };
 
 /**
- * 获取API端点URL
+ * 获取API端点URL（包含基础URL）
  * @param endpoint 端点名称
  * @param params URL参数
  * @returns 完整URL
  */
 function getEndpointUrl(endpoint: string, params?: any[]): string {
+  // 获取基础URL
+  const baseUrl = getBaseUrl();
+  
   // 获取API端点定义
   const urlEndpoint = API_ENDPOINTS[endpoint as keyof typeof API_ENDPOINTS];
   
@@ -76,13 +89,13 @@ function getEndpointUrl(endpoint: string, params?: any[]): string {
   if (typeof urlEndpoint === 'function' && params) {
     // 假设函数的第一个参数是会话ID
     if (params.length > 0) {
-      return urlEndpoint(params[0]);
+      return `${baseUrl}${urlEndpoint(params[0])}`;
     }
     throw new Error(`函数式API端点 ${endpoint} 需要参数`);
   }
   
   // 处理字符串端点
-  return urlEndpoint as string;
+  return `${baseUrl}${urlEndpoint as string}`;
 }
 
 /**
@@ -167,13 +180,26 @@ async function request<T>(
     // 尝试解析响应
     let responseData;
     
-    try {
-      // 尝试获取JSON
-      responseData = await response.json();
-    } catch (jsonError) {
-      clientLogger.error(`解析JSON响应失败:`, jsonError);
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        // 尝试获取JSON
+        responseData = await response.json();
+      } catch (jsonError) {
+        clientLogger.error(`解析JSON响应失败:`, jsonError);
+        
+        // 创建一个基本的成功响应
+        responseData = {
+          code: response.status,
+          data: null,
+          message: '服务器返回非标准JSON响应'
+        };
+      }
+    } else {
+      // 非JSON响应
+      const text = await response.text();
+      clientLogger.warn(`接收到非JSON响应: ${contentType}`, text.substring(0, 100));
       
-      // 创建一个基本的成功响应
       responseData = {
         code: response.status,
         data: null,
@@ -216,7 +242,10 @@ addResponseInterceptor(async (response, responseData) => {
     
     // 重定向到登录页面
     if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth')) {
-      window.location.href = '/auth?redirect=' + encodeURIComponent(window.location.pathname);
+      // 确保URL是完整的绝对路径
+      const baseUrl = getBaseUrl();
+      const redirectPath = encodeURIComponent(window.location.pathname);
+      window.location.href = `${baseUrl}/auth?redirect=${redirectPath}`;
     }
   }
   

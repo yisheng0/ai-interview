@@ -2,6 +2,7 @@ package com.interviewspringboot.service.impl;
 
 import com.interviewspringboot.mapper.InterviewMapper;
 import com.interviewspringboot.mapper.InterviewRoundMapper;
+import com.interviewspringboot.mapper.InterviewConversationMapper;
 import com.interviewspringboot.pojo.Interview;
 import com.interviewspringboot.pojo.InterviewRound;
 import com.interviewspringboot.pojo.Result;
@@ -28,6 +29,9 @@ public class InterviewServiceImpl implements InterviewService {
     
     @Autowired
     private InterviewRoundMapper roundMapper;
+    
+    @Autowired
+    private InterviewConversationMapper conversationMapper;
     
     /**
      * 创建面试
@@ -56,7 +60,14 @@ public class InterviewServiceImpl implements InterviewService {
         InterviewRound round = new InterviewRound();
         round.setInterviewId(interview.getId());
         round.setRoundNumber(1); // 第一轮
-        round.setScheduledTime(request.getScheduledTime());
+        
+        // 如果未提供面试时间，则使用当前时间作为默认值
+        if (request.getScheduledTime() == null) {
+            round.setScheduledTime(LocalDateTime.now());
+        } else {
+            round.setScheduledTime(request.getScheduledTime());
+        }
+        
         round.setStatus("PENDING"); // 默认状态为待面试
         
         // 插入面试轮次
@@ -133,7 +144,12 @@ public class InterviewServiceImpl implements InterviewService {
                     // 更新已有轮次
                     InterviewRound round = roundMapper.selectById(roundRequest.getId());
                     if (round != null && round.getInterviewId().equals(interview.getId())) {
-                        round.setScheduledTime(roundRequest.getScheduledTime());
+                        // 如果scheduledTime为null，赋值为当前时间
+                        if (roundRequest.getScheduledTime() == null) {
+                            round.setScheduledTime(LocalDateTime.now());
+                        } else {
+                            round.setScheduledTime(roundRequest.getScheduledTime());
+                        }
                         round.setStatus(roundRequest.getStatus());
                         roundMapper.update(round);
                     }
@@ -142,7 +158,12 @@ public class InterviewServiceImpl implements InterviewService {
                     InterviewRound round = new InterviewRound();
                     round.setInterviewId(interview.getId());
                     round.setRoundNumber(maxRoundNumber + 1); // 新轮次号
-                    round.setScheduledTime(roundRequest.getScheduledTime());
+                    // 如果scheduledTime为null，赋值为当前时间
+                    if (roundRequest.getScheduledTime() == null) {
+                        round.setScheduledTime(LocalDateTime.now());
+                    } else {
+                        round.setScheduledTime(roundRequest.getScheduledTime());
+                    }
                     round.setStatus("PENDING"); // 默认状态为待面试
                     roundMapper.insert(round);
                     maxRoundNumber++; // 更新最大轮次号
@@ -178,9 +199,14 @@ public class InterviewServiceImpl implements InterviewService {
             return Result.error(403, "无权删除此面试");
         }
         
+        // 先查出所有轮次
+        List<InterviewRound> rounds = roundMapper.selectByInterviewId(interviewId);
+        // 先删除所有轮次对应的对话
+        for (InterviewRound round : rounds) {
+            conversationMapper.deleteByRoundId(round.getId());
+        }
         // 先删除面试轮次
         roundMapper.deleteByInterviewId(interviewId);
-        
         // 再删除面试
         interviewMapper.deleteById(interviewId);
         
@@ -209,6 +235,8 @@ public class InterviewServiceImpl implements InterviewService {
             return Result.error(403, "无权删除此面试轮次");
         }
         
+        // 先删除该轮次的对话
+        conversationMapper.deleteByRoundId(roundId);
         // 删除面试轮次
         roundMapper.deleteById(roundId);
         

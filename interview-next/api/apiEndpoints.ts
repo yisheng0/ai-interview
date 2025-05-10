@@ -19,5 +19,12 @@ export const API_ENDPOINTS = {
     RESUME_DETAIL: (id: string) => `/api/resume/${id}`,
     RESUME_SAVE: '/api/resume/save',
     RESUME_DELETE: (id: string) => `/api/resume/delete/${id}`,
-    RESUME_UPLOAD: '/api/upload/resume'
+    RESUME_UPLOAD: '/api/upload/resume',
+
+    // 面试日程模块
+    INTERVIEW_LIST: '/api/interview/list',
+    INTERVIEW_CREATE: '/api/interview/create',
+    INTERVIEW_UPDATE: '/api/interview/update',
+    INTERVIEW_DELETE: (id: string) => `/api/interview/delete/${id}`,
+    INTERVIEW_ROUND_DELETE: (id: string) => `/api/interview/round/delete/${id}`
 };

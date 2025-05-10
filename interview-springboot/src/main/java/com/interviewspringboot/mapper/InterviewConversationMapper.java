@@ -49,4 +49,12 @@ public interface InterviewConversationMapper {
     @Update("UPDATE interview_conversation SET conversation_text = #{conversationText} " +
             "WHERE session_id = #{sessionId}")
     int updateConversation(InterviewConversation conversation);
+    
+    /**
+     * 根据面试轮次ID删除对话记录
+     * @param roundId 面试轮次ID
+     * @return 影响的行数
+     */
+    @Delete("DELETE FROM interview_conversation WHERE round_id = #{roundId}")
+    int deleteByRoundId(Long roundId);
 } 
