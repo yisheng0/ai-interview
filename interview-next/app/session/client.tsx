@@ -146,6 +146,9 @@ export default function InterviewSessionClientModule({
   // 新增的isAiStreaming状态
   const [isAiStreaming, setIsAiStreaming] = useState<boolean>(false);
   
+  // 添加一个新的状态来存储当前会话的临时文本
+  const [currentSessionText, setCurrentSessionText] = useState('');
+  
   /**
    * 检测操作系统类型
    */
@@ -185,7 +188,6 @@ export default function InterviewSessionClientModule({
   
   /**
    * 启动静音检测
-   * 当检测到连续1000ms无声音，且有存在未上报的面试问题的时候，发起一次问题上报请求
    */
   const startSilenceDetection = () => {
     // 清除之前的定时器
@@ -199,37 +201,33 @@ export default function InterviewSessionClientModule({
     lastVoiceActivityRef.current = initTime;
     textUpdateTimeRef.current = initTime;
     
+    // 重置当前会话文本
+    setCurrentSessionText('');
+    recognizedTextRef.current = '';
+    
     clientLogger.info('【静音检测】启动静音检测，初始时间：', initTime);
     
-    // 创建新的定时器，简化逻辑，确保可靠检测
+    // 创建新的定时器
     silenceTimerRef.current = setInterval(() => {
-      // 当前时间
       const now = Date.now();
-      
-      // 计算静音时间
       const silenceTime = now - lastVoiceActivityRef.current;
-      
-      // 检查是否有识别文本
       const recognizedText = recognizedTextRef.current.trim();
       const hasText = recognizedText.length > 0;
       
-      // 输出详细日志用于排查
+      // 输出详细日志
       if (hasText) {
         clientLogger.info('【静音检测】状态检查:', {
           silenceTime,
           hasText,
           isProcessing: isProcessingRef.current,
           uiState,
-          recognizedText: recognizedText.length > 30 ? 
-            recognizedText.substring(0, 30) + '...' : 
-            recognizedText
+          recognizedText
         });
       }
       
-      // 如果有文本且满足触发条件，发起请求
+      // 触发条件：有文本 + 不在处理中 + 静音超过1秒
       if (hasText && 
           !isProcessingRef.current && 
-          (uiState === UIState.RECOGNIZING || uiState === UIState.INITIAL) && 
           silenceTime >= 1000) {
         
         clientLogger.info(`【静音检测】触发AI请求，静音时间: ${silenceTime}，问题: ${recognizedText}，当前状态: ${uiState}`);
@@ -243,7 +241,7 @@ export default function InterviewSessionClientModule({
         // 触发AI请求
         setProcessingState(recognizedText);
       }
-    }, 500); // 增加间隔到500毫秒，减少检测频率提高稳定性
+    }, 100);
   };
   
   /**
@@ -253,15 +251,12 @@ export default function InterviewSessionClientModule({
     // 设置UI状态为识别中
     setUIState(UIState.RECOGNIZING);
     
-    // 当识别到新的面试官音频时，清空面试问题区
+    // 只在从处理状态切换到识别状态时清空文本
     if (uiState === UIState.PROCESSING) {
       setInterimText('');
+      setCurrentSessionText('');
       recognizedTextRef.current = '';
     }
-    
-    // 不再自动清空AI回复和分析结果，保持显示上一次的回复
-    // setAiResponse('');
-    // setAnalysisResponse('');
     
     // 重置处理标记
     isProcessingRef.current = false;
@@ -574,67 +569,44 @@ export default function InterviewSessionClientModule({
     }
   }, [status, error]);
   
-  // 处理临时识别结果
+  // 修改语音识别结果处理函数
   useEffect(() => {
-    // 如果没有临时识别结果或者当前在处理中，不处理
-    if (!interimTranscript || isProcessingRef.current || uiState === UIState.PROCESSING) {
-      return;
-    }
-    
-    // 每次收到临时识别结果，记录活动时间
-    const now = Date.now();
-    lastVoiceActivityRef.current = now;
-    textUpdateTimeRef.current = now;
-    
-    clientLogger.info(`【语音活动】检测到语音活动，更新时间: ${now}`);
-    
-    // 更新识别的文本
-    recognizedTextRef.current = interimTranscript;
-    
-    // 更新UI显示文本
-    setInterimText(interimTranscript);
-    
-    // 如果不在识别状态，直接设置为识别状态
-    if (uiState !== UIState.RECOGNIZING) {
-      clientLogger.info(`【状态切换】从 ${uiState} 切换到 ${UIState.RECOGNIZING}`);
-      setUIState(UIState.RECOGNIZING);
+    if (transcript) {
+      // 如果是新的语音识别开始（通过检查时间间隔）
+      const now = Date.now();
+      if (now - lastVoiceActivityRef.current > 2000) { // 如果超过2秒没有语音活动，认为是新的会话
+        // 重置所有文本
+        setInterimText('');
+        setCurrentSessionText('');
+        recognizedTextRef.current = '';
+      }
       
-      // 重置处理标记
-      isProcessingRef.current = false;
+      // 更新临时识别文本
+      setInterimText(transcript);
+      setCurrentSessionText(transcript);
+      recognizedTextRef.current = transcript;
+      
+      // 更新最后语音活动时间
+      lastVoiceActivityRef.current = now;
+      textUpdateTimeRef.current = now;
+      
+      clientLogger.info('【语音活动】检测到语音活动，更新时间:', lastVoiceActivityRef.current);
     }
-    
-    // 确保静音检测在运行
-    if (!silenceTimerRef.current) {
-      startSilenceDetection();
-    }
-  }, [interimTranscript, uiState]);
+  }, [transcript]);
   
-  // 处理最终识别结果
+  // 修改最终识别结果处理
   useEffect(() => {
-    if (!transcript || isProcessingRef.current || uiState === UIState.PROCESSING) {
-      return;
+    if (transcript && transcript.trim()) {
+      const finalText = transcript.trim();
+      clientLogger.info('接收到最终识别结果:', finalText);
+      // 更新当前会话的文本
+      setCurrentSessionText(finalText);
+      setInterimText(finalText);
+      recognizedTextRef.current = finalText;
+      lastVoiceActivityRef.current = Date.now();
+      clientLogger.info('【语音活动】接收到最终结果，更新活动时间:', lastVoiceActivityRef.current);
     }
-    
-    clientLogger.info('接收到最终识别结果:', transcript);
-    
-    // 每次收到最终识别结果，记录活动时间
-    const now = Date.now();
-    lastVoiceActivityRef.current = now;
-    textUpdateTimeRef.current = now;
-    
-    clientLogger.info(`【语音活动】接收到最终结果，更新活动时间: ${now}`);
-    
-    // 拼接最终识别结果
-    const prevText = recognizedTextRef.current;
-    const updatedText = prevText ? `${prevText} ${transcript}` : transcript;
-    recognizedTextRef.current = updatedText;
-    
-    // 更新UI显示
-    setInterimText(updatedText);
-    
-    // 重置transcript，避免重复处理
-    resetTranscript();
-  }, [transcript, uiState, resetTranscript]);
+  }, [transcript]);
   
   // 组件挂载和卸载
   useEffect(() => {
